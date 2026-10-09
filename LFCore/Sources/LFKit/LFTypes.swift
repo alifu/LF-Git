@@ -77,6 +77,11 @@ public struct LFRange: Sendable, Equatable {
     public let offset: Int
     public let length: Int
 
+    public init(offset: Int, length: Int) {
+        self.offset = offset
+        self.length = length
+    }
+
     init(_ raw: lf_range) {
         offset = Int(raw.offset)
         length = Int(raw.length)

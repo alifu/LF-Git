@@ -14,6 +14,7 @@ public struct LFGitCommand: ParsableCommand {
             MergetoolCommand.self,
             DriverCommand.self,
             InstallCommand.self,
+            OpenCommand.self,
         ]
     )
 

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		82C428D03078FCD200C5A3AD /* LFKit in Frameworks */ = {isa = PBXBuildFile; productRef = 82C428D13078FCD200C5A3AD /* LFKit */; };
+		82C428D43078FCD200C5A3AD /* LFTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = 82C428D53078FCD200C5A3AD /* LFTestSupport */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,6 +65,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				82C428D43078FCD200C5A3AD /* LFTestSupport in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -141,6 +143,7 @@
 			);
 			name = "LF-GitTests";
 			packageProductDependencies = (
+				82C428D53078FCD200C5A3AD /* LFTestSupport */,
 			);
 			productName = "LF-GitTests";
 			productReference = 82C428AB3078FCD200C5A3AD /* LF-GitTests.xctest */;
@@ -409,6 +412,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/LF-Git-Info.plist";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -438,6 +442,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/LF-Git-Info.plist";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -584,6 +589,10 @@
 		82C428D13078FCD200C5A3AD /* LFKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = LFKit;
+		};
+		82C428D53078FCD200C5A3AD /* LFTestSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LFTestSupport;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

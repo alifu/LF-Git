@@ -2,7 +2,7 @@
 
 A native macOS merge tool and Git client for resolving conflicts in **files of any size**, from a Swift source file to an Xcode `project.pbxproj` with millions of lines.
 
-> **Status:** early development. The C engine, the `lfgit` command line tool and the semantic `.pbxproj` merge work (phases 1–3); the SwiftUI conflict editor is next.
+> **Status:** early development. The C engine, the `lfgit` command line tool, the semantic `.pbxproj` merge and the macOS app work (phases 1–4); Git client features and Homebrew packaging are next.
 
 ## Goals
 
@@ -35,6 +35,31 @@ swift run --package-path LFCore lfgit --version
 xcodebuild -project LF-Git.xcodeproj -scheme LF-Git build
 ```
 
+## The app
+
+`lfgit open` (in a repository) or **File › Open Repository…** shows every conflicted file; pick one
+and resolve it the way VS Code does, but on files of any size.
+
+- Each conflict has **Accept Current · Accept Incoming · Accept Both · Accept Base · Compare**; a
+  resolved conflict stays visible with the discarded side struck through, and **Undo** is one click away.
+- The conflict map on the right shows where conflicts are and which are resolved; click to jump.
+- **Re-merge Project** merges `project.pbxproj` object by object; binary files offer *Use Current* /
+  *Use Incoming* with image previews.
+- Saving writes the file (open conflicts keep their markers) and, once everything is resolved, stages it.
+- Light and dark mode follow the system, or choose in Settings (⌘,).
+
+| Shortcut | Action |
+|---|---|
+| ⌥⌘↓ / ⌥⌘↑ | Next / previous conflict (unresolved first) |
+| ⌘1 / ⌘2 / ⌘3 / ⌘4 | Accept current / incoming / both / base |
+| ⇧⌘1 / ⇧⌘2 | Accept all current / all incoming |
+| ⌘Z / ⇧⌘Z | Undo / redo a resolution |
+| ⌘S | Save (and stage when fully resolved) |
+| ⌘R | Reload the conflicted files |
+
+A 2,000,000-line file with 1,000 conflicts opens in about 2.6 s from launch; rows are read from the
+engine only when they scroll into view.
+
 ## Command line
 
 ```bash
@@ -44,6 +69,7 @@ lfgit resolve --all-incoming --stage  # no file arguments = every conflicted fil
 lfgit tui path/to/file                # interactive: [c]urrent [i]ncoming [b]oth [B]oth-reversed [a]ncestor [e]dit [k]eep [q]uit
 lfgit install                         # register as `git mergetool` + merge driver (this repo; --global for all)
 git mergetool                         # now opens lfgit's interactive resolver for each conflicted file
+lfgit open [file]                     # open this repository (and file) in the app
 lfgit install --attributes '*.pbxproj'   # merge project files object by object during every merge
 lfgit remerge [--stage]               # already conflicted? re-merge project.pbxproj from git's index (old file kept as .orig)
 ```
