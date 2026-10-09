@@ -4,6 +4,8 @@ public enum GitError: Error, Equatable, Sendable, LocalizedError, CustomStringCo
     case launchFailed(String)
     case failed(arguments: [String], status: Int32, stderr: String)
     case notARepository(String)
+    /// git succeeded but printed something this app does not understand.
+    case unexpectedOutput(String)
 
     public var description: String {
         switch self {
@@ -13,6 +15,8 @@ public enum GitError: Error, Equatable, Sendable, LocalizedError, CustomStringCo
             "git \(arguments.joined(separator: " ")) failed (exit \(status))" + (stderr.isEmpty ? "" : ": \(stderr)")
         case .notARepository(let path):
             "'\(path)' is not inside a git repository"
+        case .unexpectedOutput(let what):
+            "unexpected output from git (\(what))"
         }
     }
 
@@ -39,34 +43,70 @@ public struct Git: Sendable {
         self.directory = directory
     }
 
+    /// Runs `git` and waits for it.
+    /// - Parameters:
+    ///   - stdin: bytes fed to git's standard input (through a temporary file, so large input cannot deadlock).
+    ///   - outputFile: when set, standard output goes to this file instead of `GitResult.stdout`, so huge
+    ///     output (a diff of a million lines) never has to fit in memory.
     @discardableResult
-    public func run(_ arguments: [String], allowedStatuses: Set<Int32> = [0]) throws(GitError) -> GitResult {
-        let errorFile = FileManager.default.temporaryDirectory.appendingPathComponent("lfgit-git-\(UUID().uuidString).err")
+    public func run(_ arguments: [String], stdin: Data? = nil, outputFile: URL? = nil,
+                    allowedStatuses: Set<Int32> = [0]) throws(GitError) -> GitResult {
+        let scratch = FileManager.default.temporaryDirectory
+        let errorFile = scratch.appendingPathComponent("lfgit-git-\(UUID().uuidString).err")
         guard FileManager.default.createFile(atPath: errorFile.path, contents: nil),
               let errorHandle = try? FileHandle(forWritingTo: errorFile) else {
             throw .launchFailed("cannot create a temporary file for git's error output")
         }
-        defer { try? FileManager.default.removeItem(at: errorFile) }
+        var inputFile: URL?
+        defer {
+            try? FileManager.default.removeItem(at: errorFile)
+            if let inputFile { try? FileManager.default.removeItem(at: inputFile) }
+        }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git"] + arguments
         process.currentDirectoryURL = directory
         process.environment = ProcessInfo.processInfo.environment.merging(["GIT_TERMINAL_PROMPT": "0"]) { _, new in new }
-        process.standardInput = FileHandle.nullDevice
+        var inputHandle: FileHandle?
+        if let stdin {
+            let url = scratch.appendingPathComponent("lfgit-git-\(UUID().uuidString).in")
+            inputFile = url
+            guard (try? stdin.write(to: url)) != nil, let handle = try? FileHandle(forReadingFrom: url) else {
+                try? errorHandle.close()
+                throw .launchFailed("cannot create a temporary file for git's input")
+            }
+            inputHandle = handle
+        }
+        process.standardInput = inputHandle ?? FileHandle.nullDevice
         let outputPipe = Pipe()
-        process.standardOutput = outputPipe
+        var outputHandle: FileHandle?
+        if let outputFile {
+            guard FileManager.default.createFile(atPath: outputFile.path, contents: nil),
+                  let handle = try? FileHandle(forWritingTo: outputFile) else {
+                try? errorHandle.close()
+                throw .launchFailed("cannot write \(outputFile.path)")
+            }
+            outputHandle = handle
+            process.standardOutput = handle
+        } else {
+            process.standardOutput = outputPipe
+        }
         process.standardError = errorHandle
 
         do {
             try process.run()
         } catch {
             try? errorHandle.close()
+            try? inputHandle?.close()
+            try? outputHandle?.close()
             throw .launchFailed(error.localizedDescription)
         }
-        let output = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let output = outputHandle == nil ? outputPipe.fileHandleForReading.readDataToEndOfFile() : Data()
         process.waitUntilExit()
         try? errorHandle.close()
+        try? inputHandle?.close()
+        try? outputHandle?.close()
 
         if process.terminationReason == .uncaughtSignal {
             throw .failed(arguments: arguments, status: process.terminationStatus, stderr: "terminated by signal \(process.terminationStatus)")

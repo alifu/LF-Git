@@ -42,6 +42,8 @@ public struct ConflictSpec {
 public final class GitFixture: @unchecked Sendable {
     public let sandbox = Sandbox()
     public let git: Git
+    /// Bare repositories created by `addOrigin`, kept alive as long as the fixture.
+    private var remotes: [Sandbox] = []
 
     public var directory: URL { sandbox.root }
     public var path: String { sandbox.root.path }
@@ -53,6 +55,35 @@ public final class GitFixture: @unchecked Sendable {
         try git.run(["config", "user.name", "Test"])
         try git.run(["config", "user.email", "test@example.com"])
         try git.run(["config", "commit.gpgsign", "false"])
+    }
+
+    /// A working copy cloned from `remote`, which must contain a `main` branch.
+    public init(cloning remote: URL) throws {
+        _ = isolatedGitEnvironment
+        git = Git(directory: sandbox.root)
+        try git.run(["clone", "-q", remote.path, sandbox.root.path])
+        try git.run(["config", "user.name", "Test"])
+        try git.run(["config", "user.email", "test@example.com"])
+        try git.run(["config", "commit.gpgsign", "false"])
+    }
+
+    /// Writes a file and commits everything; returns the new commit's full hash.
+    @discardableResult
+    public func commit(_ path: String, _ text: String, message: String? = nil) throws -> String {
+        sandbox.write(path, text)
+        try commitAll(message ?? "update \(path)")
+        return try git.run(["rev-parse", "HEAD"]).text
+    }
+
+    /// A bare repository registered as `origin`; `main` is pushed to it and tracks it.
+    @discardableResult
+    public func addOrigin() throws -> URL {
+        let bare = Sandbox()
+        try Git(directory: bare.root).run(["init", "-q", "--bare", "-b", "main"])
+        remotes.append(bare)
+        try git.run(["remote", "add", "origin", bare.root.path])
+        try git.run(["push", "-q", "-u", "origin", "main"])
+        return bare.root
     }
 
     public func commitAll(_ message: String) throws {
