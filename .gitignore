@@ -1,0 +1,70 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Xcode — per-user state
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+**/*.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+
+# Xcode — build output
+build/
+DerivedData/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.xcresult
+*.xcarchive
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+Package.resolved.orig
+
+# C build artifacts
+*.o
+*.a
+*.dylib
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+compile_commands.json
+.cache/
+.clangd/
+
+# Fuzzing (libFuzzer)
+crash-*
+leak-*
+timeout-*
+oom-*
+fuzz-*.log
+
+# Benchmarks — generated large fixtures (never commit multi-GB files)
+Benchmarks/output/
+LFCore/Benchmarks/output/
+*.generated.pbxproj
+
+# Release / Homebrew packaging output
+dist/
+*.zip
+*.tar.gz
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Claude Code — keep plans, ignore local session state
+.claude/*
+.claude/plans/
+.claude/settings.local.json
+
