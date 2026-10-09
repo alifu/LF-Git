@@ -35,11 +35,36 @@ public struct CommitFileChange: Sendable, Equatable, Identifiable {
     public var id: String { path }
 }
 
+/// What to look for when listing history.
+public struct GitLogFilter: Sendable, Equatable {
+    public var path: String?
+    public var author: String?
+    /// Text in the commit message (plain text, not a pattern).
+    public var message: String?
+    /// Start from this branch/tag/commit instead of HEAD.
+    public var revision: String?
+    public var followRenames = false
+    public var includeMerges = true
+
+    public init(path: String? = nil, author: String? = nil, message: String? = nil, revision: String? = nil,
+                followRenames: Bool = false, includeMerges: Bool = true) {
+        self.path = path
+        self.author = author
+        self.message = message
+        self.revision = revision
+        self.followRenames = followRenames
+        self.includeMerges = includeMerges
+    }
+
+    public var isEmpty: Bool { self == GitLogFilter() }
+}
+
 extension GitClient {
     private static let fieldSeparator = "\u{1F}"
 
     /// Commits of the current branch, newest first; `allBranches` includes every ref.
-    public func log(maxCount: Int? = nil, skip: Int = 0, allBranches: Bool = false) throws -> [GitCommit] {
+    public func log(maxCount: Int? = nil, skip: Int = 0, allBranches: Bool = false,
+                    filter: GitLogFilter = GitLogFilter()) throws -> [GitCommit] {
         // -z ends every record with NUL, which a commit subject cannot contain. --topo-order lists every
         // commit before its parents, which the graph layout relies on (dates alone can be skewed).
         let format = ["%H", "%P", "%an", "%ae", "%at", "%D", "%s"].joined(separator: "%x1f")
@@ -47,6 +72,18 @@ extension GitClient {
         if let maxCount { arguments.append("--max-count=\(maxCount)") }
         if skip > 0 { arguments.append("--skip=\(skip)") }
         if allBranches { arguments.append("--all") }
+        // Search text travels inside a single `--option=value` argument, so it can never be read as an option.
+        if let author = filter.author, !author.isEmpty { arguments.append("--author=\(author)") }
+        if let message = filter.message, !message.isEmpty { arguments += ["--grep=\(message)", "--fixed-strings", "--regexp-ignore-case"] }
+        if !filter.includeMerges { arguments.append("--no-merges") }
+        if let revision = filter.revision {
+            try requireName(revision, what: "revision")
+            arguments.append(revision)
+        }
+        if let path = filter.path, !path.isEmpty {
+            if filter.followRenames { arguments.append("--follow") }
+            arguments += ["--", path]
+        }
         let result = try git.run(arguments, allowedStatuses: [0, 128])
         if result.status == 128 {
             if result.stderr.contains("does not have any commits") { return [] }
@@ -72,8 +109,18 @@ extension GitClient {
 
     /// The files a commit changed (a merge commit is compared with its first parent).
     public func changedFiles(in commit: GitCommit) throws -> [CommitFileChange] {
-        let base = try baseRevision(of: commit)
-        let result = try git.run(["diff", "--name-status", "-z", "-M", base, commit.hash])
+        try nameStatus(from: try baseRevision(of: commit), to: commit.hash)
+    }
+
+    /// The files that differ between two revisions.
+    public func changedFiles(from: String, to: String) throws -> [CommitFileChange] {
+        try requireName(from, what: "revision")
+        try requireName(to, what: "revision")
+        return try nameStatus(from: from, to: to)
+    }
+
+    private func nameStatus(from base: String, to target: String) throws -> [CommitFileChange] {
+        let result = try git.run(["diff", "--name-status", "-z", "-M", base, target])
         let fields = result.stdout.split(separator: 0, omittingEmptySubsequences: true).map { String(decoding: $0, as: UTF8.self) }
         var changes: [CommitFileChange] = []
         var index = 0

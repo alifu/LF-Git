@@ -143,6 +143,25 @@ extension UnsafeRawBufferPointer {
     }
 }
 
+/// How a diff is produced. The defaults are git's own.
+public struct DiffOptions: Sendable, Equatable {
+    /// Hide changes that only touch whitespace. A diff made this way cannot be staged hunk by hunk.
+    public var ignoreWhitespace = false
+    /// Lines of context around a change; nil = git's default (3).
+    public var contextLines: Int?
+    public var detectRenames = true
+
+    public init(ignoreWhitespace: Bool = false, contextLines: Int? = nil, detectRenames: Bool = true) {
+        self.ignoreWhitespace = ignoreWhitespace
+        self.contextLines = contextLines.map { min(max($0, 0), 1000) }
+        self.detectRenames = detectRenames
+    }
+
+    var arguments: [String] {
+        (ignoreWhitespace ? ["-w"] : []) + (contextLines.map { ["-U\($0)"] } ?? []) + (detectRenames ? [] : ["--no-renames"])
+    }
+}
+
 /// A unified diff of one file, kept on disk and read through the C engine, so a diff of millions of
 /// lines costs no more memory than a small one. The temporary file is removed with the object.
 public final class GitDiffFile: @unchecked Sendable {
@@ -151,12 +170,14 @@ public final class GitDiffFile: @unchecked Sendable {
 
     public let fileURL: URL
     public let index: DiffIndex
+    public let options: DiffOptions
     /// nil when the engine cannot read the text (for example UTF-16 content).
     private let document: LFDocument?
 
-    init(fileURL: URL, index: DiffIndex) {
+    init(fileURL: URL, index: DiffIndex, options: DiffOptions = DiffOptions()) {
         self.fileURL = fileURL
         self.index = index
+        self.options = options
         document = try? LFDocument(path: fileURL.path)
     }
 
@@ -180,6 +201,9 @@ public final class GitDiffFile: @unchecked Sendable {
 
     public var isDisplayable: Bool { document != nil }
 
+    /// Hunks and lines can be staged only from a diff that matches the file byte for byte.
+    public var isStageable: Bool { !options.ignoreWhitespace }
+
     /// Old- and new-file line numbers of a diff line (0 = none).
     public func numbers(ofLine line: Int) -> (old: Int, new: Int) {
         index.numbers(ofLine: line)
@@ -202,13 +226,25 @@ public final class GitDiffFile: @unchecked Sendable {
 
     /// The file header plus one hunk: a patch `git apply` accepts on its own.
     public func patch(for hunk: DiffHunk) throws -> Data {
-        let handle = try FileHandle(forReadingFrom: fileURL)
-        defer { try? handle.close() }
-        var patch = try handle.read(upToCount: index.fileHeaderByteCount) ?? Data()
-        try handle.seek(toOffset: UInt64(hunk.byteStart))
-        patch.append(try handle.read(upToCount: hunk.byteEnd - hunk.byteStart) ?? Data())
+        var patch = try fileHeader()
+        patch.append(try hunkBytes(hunk))
         if patch.last != 0x0A { patch.append(0x0A) }
         return patch
+    }
+
+    /// `diff --git`, `index`, `---` and `+++` lines.
+    func fileHeader() throws -> Data {
+        let handle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? handle.close() }
+        return try handle.read(upToCount: index.fileHeaderByteCount) ?? Data()
+    }
+
+    /// The hunk's own bytes, `@@` line included.
+    func hunkBytes(_ hunk: DiffHunk) throws -> Data {
+        let handle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? handle.close() }
+        try handle.seek(toOffset: UInt64(hunk.byteStart))
+        return try handle.read(upToCount: hunk.byteEnd - hunk.byteStart) ?? Data()
     }
 }
 
@@ -218,15 +254,17 @@ public enum DiffTarget: Sendable {
     case untracked(path: String)
     /// One file of a commit, compared with the commit's first parent.
     case commit(GitCommit, path: String, originalPath: String? = nil)
+    /// One file between two revisions (branches, tags, commits).
+    case range(from: String, to: String, path: String, originalPath: String? = nil)
 }
 
 extension GitClient {
     /// The diff of one file, written to a temporary file and indexed.
-    public func diff(of target: DiffTarget) throws -> GitDiffFile {
+    public func diff(of target: DiffTarget, options: DiffOptions = DiffOptions()) throws -> GitDiffFile {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("lfgit-diff-\(UUID().uuidString).diff")
         // Fixed prefixes: `git apply` expects a/ and b/ whatever diff.noprefix says.
         // --no-textconv: a hunk is applied as a patch, so it has to be the file's real text.
-        let common = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/"]
+        let common = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/"] + options.arguments
         var allowed: Set<Int32> = [0]
         var arguments: [String]
         switch target {
@@ -237,11 +275,15 @@ extension GitClient {
             allowed = [0, 1] // --no-index exits 1 when the files differ
         case .commit(let commit, let path, let originalPath):
             arguments = common + ["-M", try baseRevision(of: commit), commit.hash, "--", path] + (originalPath.map { [$0] } ?? [])
+        case .range(let from, let to, let path, let originalPath):
+            try requireName(from, what: "revision")
+            try requireName(to, what: "revision")
+            arguments = common + ["-M", from, to, "--", path] + (originalPath.map { [$0] } ?? [])
         }
         do {
             try git.run(arguments, outputFile: url, allowedStatuses: allowed)
             let index = try Data(contentsOf: url, options: .alwaysMapped).withUnsafeBytes { DiffParser.parse($0) }
-            return GitDiffFile(fileURL: url, index: index)
+            return GitDiffFile(fileURL: url, index: index, options: options)
         } catch {
             try? FileManager.default.removeItem(at: url)
             throw error
