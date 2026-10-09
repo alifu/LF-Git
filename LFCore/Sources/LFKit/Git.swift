@@ -6,6 +6,10 @@ public enum GitError: Error, Equatable, Sendable, LocalizedError, CustomStringCo
     case notARepository(String)
     /// git succeeded but printed something this app does not understand.
     case unexpectedOutput(String)
+    /// The caller stopped the command.
+    case cancelled
+    /// The command ran longer than its time limit and was stopped.
+    case timedOut(seconds: TimeInterval)
 
     public var description: String {
         switch self {
@@ -17,6 +21,10 @@ public enum GitError: Error, Equatable, Sendable, LocalizedError, CustomStringCo
             "'\(path)' is not inside a git repository"
         case .unexpectedOutput(let what):
             "unexpected output from git (\(what))"
+        case .cancelled:
+            "cancelled"
+        case .timedOut(let seconds):
+            "timed out after \(Int(seconds)) s"
         }
     }
 
@@ -36,11 +44,16 @@ public struct GitResult: Sendable {
 /// Runs the user's own `git`, so credentials, hooks and configuration behave exactly as in a terminal.
 public struct Git: Sendable {
     public let directory: URL
+    /// Every command run through this value is recorded here.
+    public let log: GitCommandLog?
 
     private static let defaultMarkerSize = Int(LFDefaults.markerSize)
+    /// How long a stopped command gets to clean up before it is killed.
+    private static let gracePeriod: TimeInterval = 2
 
-    public init(directory: URL) {
+    public init(directory: URL, log: GitCommandLog? = nil) {
         self.directory = directory
+        self.log = log
     }
 
     /// Runs `git` and waits for it.
@@ -49,21 +62,51 @@ public struct Git: Sendable {
     ///   - environment: extra variables for this call (the app's own settings below always apply).
     ///   - outputFile: when set, standard output goes to this file instead of `GitResult.stdout`, so huge
     ///     output (a diff of a million lines) never has to fit in memory.
+    ///   - timeout: stop the command (`GitError.timedOut`) if it runs longer than this many seconds.
+    ///   - cancellation: lets another thread stop the command (`GitError.cancelled`).
     @discardableResult
     public func run(_ arguments: [String], stdin: Data? = nil, outputFile: URL? = nil, environment: [String: String] = [:],
-                    allowedStatuses: Set<Int32> = [0]) throws(GitError) -> GitResult {
+                    allowedStatuses: Set<Int32> = [0], timeout: TimeInterval? = nil,
+                    cancellation: GitCancellation? = nil) throws(GitError) -> GitResult {
+        let started = Date()
+        var status: Int32 = -1
+        defer { log?.record(arguments: arguments, status: status, duration: Date().timeIntervalSince(started)) }
+        if cancellation?.isCancelled == true { throw .cancelled }
+        let result = try execute(arguments, stdin: stdin, outputFile: outputFile, environment: environment,
+                                 timeout: timeout, cancellation: cancellation)
+        status = result.status
+        guard allowedStatuses.contains(result.status) else {
+            throw .failed(arguments: arguments, status: result.status, stderr: result.stderr)
+        }
+        return result
+    }
+
+    private func execute(_ arguments: [String], stdin: Data?, outputFile: URL?, environment: [String: String],
+                         timeout: TimeInterval?, cancellation: GitCancellation?) throws(GitError) -> GitResult {
         let scratch = FileManager.default.temporaryDirectory
         let errorFile = scratch.appendingPathComponent("lfgit-git-\(UUID().uuidString).err")
-        guard FileManager.default.createFile(atPath: errorFile.path, contents: nil),
-              let errorHandle = try? FileHandle(forWritingTo: errorFile) else {
-            throw .launchFailed("cannot create a temporary file for git's error output")
-        }
+        // Output goes to a file, never a pipe: a pipe stays open as long as any child of git (ssh, a hook)
+        // lives, which would keep a cancelled command waiting.
+        let outputURL = outputFile ?? scratch.appendingPathComponent("lfgit-git-\(UUID().uuidString).out")
         var inputFile: URL?
+        var handles: [FileHandle] = []
         defer {
+            handles.forEach { try? $0.close() }
             try? FileManager.default.removeItem(at: errorFile)
+            if outputFile == nil { try? FileManager.default.removeItem(at: outputURL) }
             if let inputFile { try? FileManager.default.removeItem(at: inputFile) }
         }
+        func open(_ url: URL, forWriting: Bool, what: String) throws(GitError) -> FileHandle {
+            if forWriting { _ = FileManager.default.createFile(atPath: url.path, contents: nil) }
+            guard let handle = try? (forWriting ? FileHandle(forWritingTo: url) : FileHandle(forReadingFrom: url)) else {
+                throw .launchFailed("cannot create a temporary file for git's \(what)")
+            }
+            handles.append(handle)
+            return handle
+        }
 
+        let errorHandle = try open(errorFile, forWriting: true, what: "error output")
+        let outputHandle = try open(outputURL, forWriting: true, what: "output")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git"] + arguments
@@ -78,60 +121,45 @@ public struct Git: Sendable {
                 // Paths are file names, never patterns: a file called `*.log` must not match every log file.
                 "GIT_LITERAL_PATHSPECS": "1",
             ]) { _, new in new }
-        var inputHandle: FileHandle?
         if let stdin {
             let url = scratch.appendingPathComponent("lfgit-git-\(UUID().uuidString).in")
             inputFile = url
-            guard (try? stdin.write(to: url)) != nil, let handle = try? FileHandle(forReadingFrom: url) else {
-                try? errorHandle.close()
+            guard (try? stdin.write(to: url)) != nil else {
                 throw .launchFailed("cannot create a temporary file for git's input")
             }
-            inputHandle = handle
-        }
-        process.standardInput = inputHandle ?? FileHandle.nullDevice
-        let outputPipe = Pipe()
-        var outputHandle: FileHandle?
-        if let outputFile {
-            guard FileManager.default.createFile(atPath: outputFile.path, contents: nil),
-                  let handle = try? FileHandle(forWritingTo: outputFile) else {
-                try? errorHandle.close()
-                try? inputHandle?.close()
-                throw .launchFailed("cannot write \(outputFile.path)")
-            }
-            outputHandle = handle
-            process.standardOutput = handle
+            process.standardInput = try open(url, forWriting: false, what: "input")
         } else {
-            process.standardOutput = outputPipe
+            process.standardInput = FileHandle.nullDevice
         }
+        process.standardOutput = outputHandle
         process.standardError = errorHandle
 
+        let stopper = ProcessStopper(process: process, gracePeriod: Self.gracePeriod)
         do {
             try process.run()
         } catch {
-            try? errorHandle.close()
-            try? inputHandle?.close()
-            try? outputHandle?.close()
             throw .launchFailed(error.localizedDescription)
         }
-        let output = outputHandle == nil ? outputPipe.fileHandleForReading.readDataToEndOfFile() : Data()
+        let cancelKey = cancellation?.onCancel { stopper.stop(.cancelled) }
+        let timer = timeout.map { seconds -> DispatchSourceTimer in
+            let timer = DispatchSource.makeTimerSource(queue: .global())
+            timer.schedule(deadline: .now() + seconds)
+            timer.setEventHandler { stopper.stop(.timedOut(seconds: seconds)) }
+            timer.resume()
+            return timer
+        }
         process.waitUntilExit()
-        try? errorHandle.close()
-        try? inputHandle?.close()
-        try? outputHandle?.close()
+        timer?.cancel()
+        if let cancelKey { cancellation?.remove(cancelKey) }
 
+        if let reason = stopper.reason { throw reason }
         if process.terminationReason == .uncaughtSignal {
             throw .failed(arguments: arguments, status: process.terminationStatus, stderr: "terminated by signal \(process.terminationStatus)")
         }
         let errorText = (try? Data(contentsOf: errorFile)).map { String(decoding: $0, as: UTF8.self) } ?? ""
-        let result = GitResult(
-            status: process.terminationStatus,
-            stdout: output,
-            stderr: errorText.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-        guard allowedStatuses.contains(result.status) else {
-            throw .failed(arguments: arguments, status: result.status, stderr: result.stderr)
-        }
-        return result
+        let output = outputFile == nil ? ((try? Data(contentsOf: outputURL)) ?? Data()) : Data()
+        return GitResult(status: process.terminationStatus, stdout: output,
+                         stderr: errorText.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     public func repositoryRoot() throws(GitError) -> URL {
@@ -183,5 +211,37 @@ public struct Git: Sendable {
     /// Replaces a conflicted file with one whole side (used for binary files).
     public func checkout(_ side: Side, path: String) throws(GitError) {
         try run(["checkout", "--\(side.rawValue)", "--", path])
+    }
+}
+
+/// Stops a running process politely (SIGTERM, so git can clean up its lock files), then by force.
+private final class ProcessStopper: @unchecked Sendable {
+    private let lock = NSLock()
+    private let process: Process
+    private let gracePeriod: TimeInterval
+    private var firstReason: GitError?
+
+    init(process: Process, gracePeriod: TimeInterval) {
+        self.process = process
+        self.gracePeriod = gracePeriod
+    }
+
+    /// Why the process was stopped, if it was.
+    var reason: GitError? {
+        lock.withLock { firstReason }
+    }
+
+    func stop(_ reason: GitError) {
+        let isFirst: Bool = lock.withLock {
+            guard firstReason == nil else { return false }
+            firstReason = reason
+            return true
+        }
+        guard isFirst, process.isRunning else { return }
+        process.terminate()
+        let pid = process.processIdentifier
+        DispatchQueue.global().asyncAfter(deadline: .now() + gracePeriod) { [process] in
+            if process.isRunning { kill(pid, SIGKILL) }
+        }
     }
 }

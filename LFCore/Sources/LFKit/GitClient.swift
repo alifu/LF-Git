@@ -82,8 +82,11 @@ public struct GitClient: Sendable {
     /// $GIT_EDITOR and $GIT_SEQUENCE_EDITOR would win over `core.editor`.
     private static let noEditorEnvironment = ["GIT_EDITOR": "true", "GIT_SEQUENCE_EDITOR": "true"]
 
-    public init(directory: URL) {
-        git = Git(directory: directory)
+    /// How long a fetch, pull or push may run before it is stopped.
+    public static let defaultRemoteTimeout: TimeInterval = 300
+
+    public init(directory: URL, log: GitCommandLog? = nil) {
+        git = Git(directory: directory, log: log)
     }
 
     // MARK: - Status
@@ -238,25 +241,27 @@ public struct GitClient: Sendable {
         return remotes
     }
 
-    public func fetch() throws {
+    public func fetch(timeout: TimeInterval? = defaultRemoteTimeout, cancellation: GitCancellation? = nil) throws {
         _ = try requireRemote()
-        try git.run(["fetch", "--prune", "-q"])
+        try git.run(["fetch", "--prune", "-q"], timeout: timeout, cancellation: cancellation)
     }
 
-    public func pull(_ strategy: PullStrategy = .fastForwardOnly) throws {
+    public func pull(_ strategy: PullStrategy = .fastForwardOnly, timeout: TimeInterval? = defaultRemoteTimeout,
+                     cancellation: GitCancellation? = nil) throws {
         _ = try requireRemote()
-        try git.run(["pull", "-q"] + strategy.arguments)
+        try git.run(["pull", "-q"] + strategy.arguments, timeout: timeout, cancellation: cancellation)
     }
 
     /// Pushes the current branch; a branch without an upstream is published with `-u`.
-    public func push() throws {
+    public func push(timeout: TimeInterval? = defaultRemoteTimeout, cancellation: GitCancellation? = nil) throws {
         let remotes = try requireRemote()
         let status = try status()
         guard let branch = status.branch else { throw GitClientError.notOnBranch }
         if status.upstream != nil {
-            try git.run(["push", "-q"])
+            try git.run(["push", "-q"], timeout: timeout, cancellation: cancellation)
         } else {
-            try git.run(["push", "-q", "-u", remotes.contains("origin") ? "origin" : remotes[0], branch])
+            try git.run(["push", "-q", "-u", remotes.contains("origin") ? "origin" : remotes[0], branch],
+                        timeout: timeout, cancellation: cancellation)
         }
     }
 }
