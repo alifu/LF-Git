@@ -9,7 +9,7 @@ enum EditorActions {
             } catch let error as LFError {
                 app.errorMessage = error.message
             } catch {
-                app.errorMessage = "\(error)"
+                app.report(error)
             }
             await repository?.refresh()
         }

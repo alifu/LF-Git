@@ -218,7 +218,7 @@ public struct Git: Sendable {
 }
 
 /// Stops a running process politely (SIGTERM, so git can clean up its lock files), then by force.
-private final class ProcessStopper: @unchecked Sendable {
+final class ProcessStopper: @unchecked Sendable {
     private let lock = NSLock()
     private let process: Process
     private let gracePeriod: TimeInterval

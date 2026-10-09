@@ -11,22 +11,21 @@ struct GraphRowView: View {
     private static let lineWidth: CGFloat = 1.6
     private static let laneColors: [LFThemeToken] = [.accent, .info, .warning, .syntaxKeyword, .minimapCurrent, .danger]
 
-    private static func color(_ lane: Int) -> Color {
-        .theme(laneColors[lane % laneColors.count])
-    }
-
     private func x(_ lane: Int) -> CGFloat {
         CGFloat(lane) * Self.laneWidth + Self.laneWidth / 2
     }
 
     var body: some View {
-        Canvas { context, size in
+        // Read here, on the main actor: the Canvas closure may run elsewhere.
+        let palette = Self.laneColors.map { Color.theme($0) }
+        let strokeWidth = Self.lineWidth
+        return Canvas { context, size in
             let middle = size.height / 2
             func line(from: CGPoint, to: CGPoint, lane: Int) {
                 var path = Path()
                 path.move(to: from)
                 path.addLine(to: to)
-                context.stroke(path, with: .color(Self.color(lane)), lineWidth: Self.lineWidth)
+                context.stroke(path, with: .color(palette[lane % palette.count]), lineWidth: strokeWidth)
             }
             for lane in row.passingLanes {
                 line(from: CGPoint(x: x(lane), y: 0), to: CGPoint(x: x(lane), y: size.height), lane: lane)
@@ -46,7 +45,7 @@ struct GraphRowView: View {
             let center = CGPoint(x: x(row.lane), y: middle)
             let radius = Self.dotRadius
             let dot = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-            context.fill(dot, with: .color(Self.color(row.lane)))
+            context.fill(dot, with: .color(palette[row.lane % palette.count]))
             if isMerge {
                 context.stroke(dot, with: .color(.theme(.background)), lineWidth: 1.5)
             }

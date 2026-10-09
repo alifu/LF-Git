@@ -1,4 +1,5 @@
 import AppKit
+import LFKit
 import Observation
 
 /// Window-level state: which repository is open, and errors to show.
@@ -7,6 +8,10 @@ final class AppModel {
     private(set) var repository: RepositoryModel?
     var errorMessage: String?
     private var appliedLaunchArguments = false
+    private static let recentsKey = "recentRepositories"
+    private static let recentsLimit = 10
+    /// Paths of repositories opened lately, newest first.
+    private(set) var recentRepositories: [String] = UserDefaults.standard.stringArray(forKey: recentsKey) ?? []
 
     /// Opens `url` (any folder inside a repository) and selects `file` when given.
     func open(_ url: URL, selecting file: String? = nil) {
@@ -18,6 +23,7 @@ final class AppModel {
         do {
             let model = try RepositoryModel.open(at: url)
             repository = model
+            remember(model.root)
             Task {
                 await model.refresh()
                 if let file, model.files.contains(where: { $0.id == file }) {
@@ -27,6 +33,32 @@ final class AppModel {
         } catch {
             errorMessage = "\(error)"
         }
+    }
+
+    private func remember(_ root: URL) {
+        let path = root.standardizedFileURL.path
+        // Throw-away repositories (tests, scratch clones) would only clutter the menu.
+        guard !path.hasPrefix(FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path), !path.hasPrefix("/private/var/folders"),
+              !path.hasPrefix("/var/folders") else { return }
+        recentRepositories = Array(([path] + recentRepositories.filter { $0 != path }).prefix(Self.recentsLimit))
+        UserDefaults.standard.set(recentRepositories, forKey: Self.recentsKey)
+    }
+
+    func clearRecentRepositories() {
+        recentRepositories = []
+        UserDefaults.standard.removeObject(forKey: Self.recentsKey)
+    }
+
+    /// Runs an action and shows what went wrong. A command the user cancelled is not a problem.
+    func run(_ work: @escaping () async throws -> Void) {
+        Task {
+            do { try await work() } catch { report(error) }
+        }
+    }
+
+    func report(_ error: Error) {
+        if let git = error as? GitError, git == .cancelled { return }
+        errorMessage = "\(error)"
     }
 
     func chooseRepository() {

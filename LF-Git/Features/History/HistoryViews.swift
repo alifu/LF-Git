@@ -1,15 +1,60 @@
 import LFKit
 import SwiftUI
 
-/// The commit list with the graph.
+/// The History section's list: a filter bar over the commits with their graph.
 struct HistorySidebar: View {
     let repository: RepositoryModel
+    let app: AppModel
+    @State private var query = ""
+    @State private var field: FilterField = .message
 
     private var history: HistoryModel { repository.history }
-    static let rowHeight: CGFloat = 38
+
+    enum FilterField: String, CaseIterable, Identifiable {
+        case message = "Message"
+        case author = "Author"
+        case path = "File"
+
+        var id: String { rawValue }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
+            filterBar
+            Divider()
+            CommitListView(repository: repository, app: app, model: history)
+        }
+        .task {
+            if !history.hasLoaded { await history.reload() }
+        }
+    }
+
+    private var filterBar: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.theme(.textSubtle))
+                TextField("Filter commits", text: $query)
+                    .textFieldStyle(.plain)
+                    .onSubmit(applyFilter)
+                    .accessibilityIdentifier("history-filter")
+                if !query.isEmpty || !history.filter.isEmpty {
+                    Button {
+                        query = ""
+                        applyFilter()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Clear the filter")
+                }
+                Picker("Search in", selection: $field) {
+                    ForEach(FilterField.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+                .onChange(of: field) { applyFilter() }
+            }
             HStack {
                 Toggle("All branches", isOn: Binding(
                     get: { history.allBranches },
@@ -27,37 +72,77 @@ struct HistorySidebar: View {
                 .buttonStyle(.borderless)
                 .help("Reload history")
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            Divider()
-            List(selection: Binding(get: { history.selection }, set: { id in Task { await history.select(id) } })) {
-                ForEach(Array(history.commits.enumerated()), id: \.element.id) { index, commit in
-                    CommitRow(commit: commit, row: history.graph.rows.indices.contains(index) ? history.graph.rows[index] : nil,
-                              currentBranch: repository.status.branch)
-                        .tag(commit.id)
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.hidden)
-                        .onAppear {
-                            if index >= history.commits.count - 20 {
-                                Task { await history.loadMore() }
-                            }
-                        }
-                }
-                if history.isLoading {
-                    ProgressView().frame(maxWidth: .infinity).listRowSeparator(.hidden)
-                }
-            }
-            .listStyle(.plain)
-            .environment(\.defaultMinListRowHeight, Self.rowHeight)
-            .accessibilityIdentifier("history-list")
-            .overlay {
-                if history.hasLoaded && history.commits.isEmpty {
-                    ContentUnavailableView("No commits yet", systemImage: "clock.arrow.circlepath")
-                }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+
+    private func applyFilter() {
+        let text = query.trimmingCharacters(in: .whitespaces)
+        var filter = GitLogFilter()
+        if !text.isEmpty {
+            switch field {
+            case .message: filter.message = text
+            case .author: filter.author = text
+            case .path:
+                filter.path = text
+                filter.followRenames = true
             }
         }
-        .task {
-            if !history.hasLoaded { await history.reload() }
+        history.filter = filter
+        Task { await history.reload() }
+    }
+}
+
+/// Commits with the graph and a context menu of everything that can be done to a commit.
+struct CommitListView: View {
+    let repository: RepositoryModel
+    let app: AppModel
+    let model: HistoryModel
+    @State private var selected: Set<GitCommit.ID> = []
+
+    static let rowHeight: CGFloat = 38
+
+    var body: some View {
+        List(selection: $selected) {
+            ForEach(Array(model.commits.enumerated()), id: \.element.id) { index, commit in
+                CommitRow(commit: commit, row: model.graph.rows.indices.contains(index) ? model.graph.rows[index] : nil,
+                          currentBranch: repository.status.branch,
+                          isCopied: repository.copiedCommits.contains { $0.hash == commit.hash })
+                    .tag(commit.id)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .contextMenu {
+                        let picked = selected.contains(commit.id) && selected.count > 1
+                            ? model.commits.filter { selected.contains($0.id) } : [commit]
+                        CommitContextMenu(repository: repository, app: app, model: model, commits: picked)
+                    }
+                    .onAppear {
+                        if index >= model.commits.count - 20 {
+                            Task { await model.loadMore() }
+                        }
+                    }
+            }
+            if model.isLoading {
+                ProgressView().frame(maxWidth: .infinity).listRowSeparator(.hidden)
+            }
+        }
+        .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, Self.rowHeight)
+        .accessibilityIdentifier("history-list")
+        .onChange(of: selected) {
+            if selected.count == 1, let only = selected.first, only != model.selection {
+                Task { await model.select(only) }
+            }
+        }
+        .onChange(of: model.selection) {
+            if let id = model.selection, !(selected.count > 1 && selected.contains(id)) { selected = [id] }
+        }
+        .overlay {
+            if model.hasLoaded && model.commits.isEmpty {
+                ContentUnavailableView(model.filter.isEmpty ? "No commits yet" : "No matching commits",
+                                       systemImage: "clock.arrow.circlepath")
+            }
         }
     }
 }
@@ -66,6 +151,7 @@ private struct CommitRow: View {
     let commit: GitCommit
     let row: CommitGraph.Row?
     let currentBranch: String?
+    let isCopied: Bool
 
     var body: some View {
         HStack(spacing: 6) {
@@ -84,6 +170,10 @@ private struct CommitRow: View {
                             .lineLimit(1)
                     }
                     Text(commit.subject).lineLimit(1)
+                    if isCopied {
+                        Image(systemName: "doc.on.doc.fill").font(.caption).foregroundStyle(.theme(.info))
+                            .accessibilityLabel("copied for cherry-pick")
+                    }
                 }
                 Text("\(commit.authorName) · \(commit.date.formatted(.relative(presentation: .named))) · \(commit.shortHash)")
                     .font(.caption)
@@ -92,37 +182,53 @@ private struct CommitRow: View {
             }
             Spacer(minLength: 0)
         }
-        .frame(height: HistorySidebar.rowHeight)
+        .frame(height: CommitListView.rowHeight)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("commit-\(commit.subject)")
     }
 }
 
-/// The selected commit: who and when, its files, and the diff of one file.
+/// The selected commit (or comparison): who and when, its files, and the diff or blame of one file.
 struct HistoryDetailView: View {
     let repository: RepositoryModel
-
-    private var history: HistoryModel { repository.history }
+    let app: AppModel
+    let model: HistoryModel
 
     var body: some View {
         Group {
-            if let commit = history.selectedCommit {
-                VStack(spacing: 0) {
-                    header(commit)
-                    Divider()
-                    VSplitView {
-                        fileList
-                            .frame(minHeight: 90, idealHeight: 130)
-                        diff
-                            .frame(minHeight: 160)
-                    }
-                }
+            if let commit = model.selectedCommit {
+                detail { header(commit) }
+            } else if let comparison = model.comparison {
+                detail { comparisonHeader(comparison) }
             } else {
                 ContentUnavailableView("Select a commit", systemImage: "clock.arrow.circlepath")
             }
         }
         .background(.theme(.background))
+    }
+
+    private func detail<Header: View>(@ViewBuilder header: () -> Header) -> some View {
+        VStack(spacing: 0) {
+            header()
+            Divider()
+            VSplitView {
+                fileList
+                    .frame(minHeight: 90, idealHeight: 130)
+                content
+                    .frame(minHeight: 160)
+            }
+        }
+    }
+
+    private func comparisonHeader(_ comparison: HistoryModel.Comparison) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Comparing").font(.headline).foregroundStyle(.theme(.text))
+            Text(comparison.title).font(.callout.monospaced()).foregroundStyle(.theme(.textSubtle))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(.theme(.surfaceRaised))
     }
 
     private func header(_ commit: GitCommit) -> some View {
@@ -142,8 +248,8 @@ struct HistoryDetailView: View {
     }
 
     private var fileList: some View {
-        List(selection: Binding(get: { history.selectedFile }, set: { path in Task { await history.selectFile(path) } })) {
-            ForEach(history.files) { file in
+        List(selection: Binding(get: { model.selectedFile }, set: { path in Task { await model.selectFile(path) } })) {
+            ForEach(model.files) { file in
                 HStack(spacing: 8) {
                     Text(file.status.symbol)
                         .font(.caption.monospaced().weight(.bold))
@@ -155,25 +261,55 @@ struct HistoryDetailView: View {
                     }
                 }
                 .tag(file.path)
+                .contextMenu {
+                    Button("File History") { showHistory(of: file.path) }
+                    Button("Copy Path") { Clipboard.copy(file.path) }
+                }
                 .accessibilityIdentifier("commit-file-\(file.path)")
             }
         }
         .listStyle(.plain)
         .overlay {
-            if history.files.isEmpty && history.detailError == nil {
+            if model.files.isEmpty && model.detailError == nil {
                 Text("No file changes").foregroundStyle(.theme(.textSubtle))
             }
         }
     }
 
+    private func showHistory(of path: String) {
+        repository.section = .history
+        repository.history.filter = GitLogFilter(path: path, followRenames: true)
+        Task { await repository.history.reload() }
+    }
+
     @ViewBuilder
-    private var diff: some View {
-        if let diff = history.diff {
-            DiffContentView(diff: diff)
-        } else if let error = history.detailError {
-            ContentUnavailableView("Cannot show this", systemImage: "exclamationmark.triangle", description: Text(error))
-        } else {
-            Color.clear
+    private var content: some View {
+        VStack(spacing: 0) {
+            if model.selectedFile != nil, model.selectedCommit != nil {
+                HStack {
+                    Picker("View", selection: Binding(get: { model.blame != nil }, set: { on in Task { await model.showBlame(on) } })) {
+                        Text("Diff").tag(false)
+                        Text("Blame").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    .accessibilityIdentifier("diff-blame-picker")
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                Divider()
+            }
+            if let blame = model.blame {
+                BlameView(lines: blame)
+            } else if let diff = model.diff {
+                DiffContentView(diff: diff)
+            } else if let error = model.detailError {
+                ContentUnavailableView("Cannot show this", systemImage: "exclamationmark.triangle", description: Text(error))
+            } else {
+                Color.clear
+            }
         }
     }
 }

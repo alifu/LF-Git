@@ -20,6 +20,9 @@ final class ChangesModel {
     private(set) var diffSelection: ChangeSelection?
     private(set) var diffError: String?
     var commitMessage = ""
+    /// How diffs are produced; changing it reloads the diff on screen.
+    private(set) var options = DiffOptions()
+    var noVerify = false
     private(set) var amend = false
     private(set) var isCommitting = false
     /// The message put in the box by turning amend on, so turning it off again can take it back out.
@@ -64,7 +67,7 @@ final class ChangesModel {
             ? .untracked(path: change.path)
             : .workingTree(path: change.path, staged: requested.staged)
         do {
-            let loaded = try await Self.loadDiff(client, target)
+            let loaded = try await Self.loadDiff(client, target, options)
             guard generation == diffGeneration else { return } // a newer selection superseded this one
             diff = loaded
             diffSelection = requested
@@ -91,6 +94,12 @@ final class ChangesModel {
         if reloadDiff || diffIsStale || !unchanged {
             await loadDiff()
         }
+    }
+
+    func setOptions(_ newOptions: DiffOptions) async {
+        guard newOptions != options else { return }
+        options = newOptions
+        await loadDiff()
     }
 
     // MARK: - Staging
@@ -127,6 +136,22 @@ final class ChangesModel {
             throw GitClientError.unsupported("The diff changed while you were working. Look at it again and retry.")
         }
         try await mutate { try $0.applyHunk(hunk, of: diff, stage: !diffSelection.staged) }
+    }
+
+    /// Stages or unstages only these lines of a hunk (see `applyHunk` for why the diff is passed in).
+    func applyLines(_ lines: Set<Int>, in hunk: DiffHunk, of diff: GitDiffFile) async throws {
+        guard diff === self.diff, let diffSelection, diff.isStageable else {
+            throw GitClientError.unsupported("The diff changed while you were working. Look at it again and retry.")
+        }
+        try await mutate { try $0.applyLines(lines, in: hunk, of: diff, stage: !diffSelection.staged) }
+    }
+
+    /// Throws away only these lines of an unstaged diff.
+    func discardLines(_ lines: Set<Int>, in hunk: DiffHunk, of diff: GitDiffFile) async throws {
+        guard diff === self.diff, diffSelection?.staged == false, diff.isStageable else {
+            throw GitClientError.unsupported("The diff changed while you were working. Look at it again and retry.")
+        }
+        try await mutate { try $0.discardLines(lines, in: hunk, of: diff) }
     }
 
     private func mutate(_ work: @escaping @Sendable (GitClient) throws -> Void) async throws {
@@ -171,7 +196,8 @@ final class ChangesModel {
         let client = repository.client
         let hash: String
         do {
-            hash = try await repository.writeQueue.run { try client.commit(message: message, amend: amend) }
+            let skipHooks = noVerify
+            hash = try await repository.writeQueue.run { try client.commit(message: message, amend: amend, noVerify: skipHooks) }
         } catch {
             await repository.refresh()
             throw error
@@ -187,8 +213,8 @@ final class ChangesModel {
     // MARK: - Work off the main thread
 
     @concurrent
-    nonisolated private static func loadDiff(_ client: GitClient, _ target: DiffTarget) async throws -> GitDiffFile {
-        try client.diff(of: target)
+    nonisolated private static func loadDiff(_ client: GitClient, _ target: DiffTarget, _ options: DiffOptions) async throws -> GitDiffFile {
+        try client.diff(of: target, options: options)
     }
 
     @concurrent

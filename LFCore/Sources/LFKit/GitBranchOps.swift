@@ -150,3 +150,25 @@ extension GitClient {
         return latest.message
     }
 }
+
+extension GitClient {
+    /// Puts commits in the order they have to be replayed: an ancestor before its descendants. Commits that are
+    /// not related to each other (or share a timestamp) keep the order they were given in.
+    public func sortedOldestFirst(_ commits: [GitCommit]) throws -> [GitCommit] {
+        var sorted: [GitCommit] = []
+        for commit in commits {
+            // Insert before the first commit that descends from this one.
+            var position = sorted.count
+            for (index, other) in sorted.enumerated() where try isAncestor(commit.hash, of: other.hash) {
+                position = index
+                break
+            }
+            sorted.insert(commit, at: position)
+        }
+        return sorted
+    }
+
+    func isAncestor(_ ancestor: String, of descendant: String) throws -> Bool {
+        try git.run(["merge-base", "--is-ancestor", ancestor, descendant], allowedStatuses: [0, 1]).status == 0
+    }
+}

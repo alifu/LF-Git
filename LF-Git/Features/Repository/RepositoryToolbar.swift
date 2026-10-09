@@ -78,7 +78,7 @@ struct BranchMenu: View {
 
     private func run(_ work: @escaping () async throws -> Void) {
         Task {
-            do { try await work() } catch { app.errorMessage = "\(error)" }
+            do { try await work() } catch { app.report(error) }
         }
     }
 }
@@ -93,6 +93,22 @@ struct RemoteButtons: View {
             if let title = repository.busyTitle {
                 ProgressView().controlSize(.small)
                 Text(title).font(.caption).foregroundStyle(.theme(.textSubtle))
+                if repository.isCancellable {
+                    Button("Cancel") { repository.cancelBusy() }
+                        .help("Stop the running command")
+                        .accessibilityIdentifier("cancel-operation")
+                }
+            }
+            Group {
+            if !repository.copiedCommits.isEmpty {
+                Menu {
+                    Button("Paste (Cherry-Pick)") { run { try await repository.pasteCopiedCommits() } }
+                    Button("Clear") { repository.clearCopiedCommits() }
+                } label: {
+                    Label("\(repository.copiedCommits.count)", systemImage: "doc.on.clipboard")
+                }
+                .help("\(repository.copiedCommits.count) commit(s) copied for cherry-pick")
+                .accessibilityIdentifier("copied-commits")
             }
             Button { run { try await repository.fetch() } } label: {
                 Label("Fetch", systemImage: "arrow.triangle.2.circlepath")
@@ -110,13 +126,24 @@ struct RemoteButtons: View {
             }
             .help("Pull (⌥⌘L)")
             .accessibilityIdentifier("pull")
-            Button { run { try await repository.push() } } label: {
+            Menu {
+                Button("Push") { run { try await repository.push() } }
+                Button("Force Push (with lease)…") {
+                    repository.confirm(PendingConfirmation(
+                        title: "Force push \(repository.status.branch ?? "this branch")?",
+                        message: "The remote branch is overwritten, unless somebody else pushed to it since your last fetch.",
+                        confirmTitle: "Force Push") { run { try await repository.push(force: true) } })
+                }
+            } label: {
                 countLabel("arrow.up", repository.status.ahead, name: "Push")
+            } primaryAction: {
+                run { try await repository.push() }
             }
             .help(repository.status.upstream == nil ? "Publish this branch (⌥⌘P)" : "Push (⌥⌘P)")
             .accessibilityIdentifier("push")
+            }
+            .disabled(repository.isBusy || repository.operation != nil)
         }
-        .disabled(repository.isBusy || repository.operation != nil)
     }
 
     /// The arrow, with how many commits are waiting next to it.
@@ -132,7 +159,7 @@ struct RemoteButtons: View {
 
     private func run(_ work: @escaping () async throws -> Void) {
         Task {
-            do { try await work() } catch { app.errorMessage = "\(error)" }
+            do { try await work() } catch { app.report(error) }
         }
     }
 }
@@ -184,7 +211,7 @@ struct OperationBanner: View {
 
     private func run(_ work: @escaping () async throws -> Void) {
         Task {
-            do { try await work() } catch { app.errorMessage = "\(error)" }
+            do { try await work() } catch { app.report(error) }
         }
     }
 }

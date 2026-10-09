@@ -111,7 +111,7 @@ struct EditorView: View {
 
     private func markResolved() {
         Task {
-            do { try await repository.markResolved(file.path) } catch { app.errorMessage = "\(error)" }
+            do { try await repository.markResolved(file.path) } catch { app.report(error) }
         }
     }
 
@@ -126,7 +126,7 @@ struct EditorView: View {
                     remergeMessage! += "\n\nIf you keep \(outcome.filesToReAdd.joined(separator: ", ")), add it back to the project in Xcode."
                 }
             } catch {
-                app.errorMessage = "\(error)"
+                app.report(error)
             }
         }
     }

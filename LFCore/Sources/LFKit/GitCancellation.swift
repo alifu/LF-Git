@@ -80,9 +80,14 @@ public final class GitCommandLog: @unchecked Sendable {
     }
 
     func record(arguments: [String], status: Int32, duration: TimeInterval) {
+        record(command: Self.render(arguments), status: status, duration: duration)
+    }
+
+    /// Records a command that is not git itself (a user-defined command).
+    public func record(command: String, status: Int32, duration: TimeInterval) {
         let (entry, callbacks): (GitCommandEntry, [@Sendable (GitCommandEntry) -> Void]) = lock.withLock {
             counter += 1
-            let entry = GitCommandEntry(id: counter, command: Self.render(arguments), status: status,
+            let entry = GitCommandEntry(id: counter, command: command, status: status,
                                         duration: duration, date: Date())
             stored.append(entry)
             if stored.count > capacity { stored.removeFirst(stored.count - capacity) }

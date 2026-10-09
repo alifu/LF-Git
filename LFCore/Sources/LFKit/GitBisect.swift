@@ -27,6 +27,11 @@ extension GitClient {
         return FileManager.default.fileExists(atPath: url.path)
     }
 
+    /// The commit being tested right now (HEAD) while a bisect runs, otherwise nil.
+    public func bisectCandidate() throws -> String? {
+        try isBisecting() ? try git.run(["rev-parse", "HEAD"]).text : nil
+    }
+
     /// Starts a binary search between a bad commit and an older good one.
     public func bisectStart(bad: String, good: String) throws -> BisectStep {
         try requireName(bad, what: "revision")

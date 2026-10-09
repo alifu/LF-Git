@@ -1,24 +1,29 @@
 import LFKit
 import SwiftUI
 
-/// Sections in the sidebar, and what each shows next to it.
+/// The sidebar and detail of one repository window.
 struct RepositoryView: View {
     @Bindable var repository: RepositoryModel
     let app: AppModel
+    @State private var promptText = ""
+    @State private var messageText = ""
 
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
-                sectionPicker
+                SectionGrid(repository: repository)
                 Divider()
                 sidebar
             }
-            .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 460)
+            .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 480)
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .safeAreaInset(edge: .top, spacing: 0) {
-                    OperationBanner(repository: repository, app: app)
+                    VStack(spacing: 0) {
+                        OperationBanner(repository: repository, app: app)
+                        BisectBanner(repository: repository, app: app)
+                    }
                 }
         }
         .navigationTitle(repository.name)
@@ -34,32 +39,31 @@ struct RepositoryView: View {
                     Label("Reload", systemImage: "arrow.clockwise")
                 }
                 .help("Reload (⌘R)")
+                Button { repository.showsPalette = true } label: {
+                    Label("Commands", systemImage: "command")
+                }
+                .help("Command palette (⌘K)")
+                .accessibilityIdentifier("palette-button")
             }
         }
         .focusedSceneValue(\.repositoryModel, repository)
-    }
-
-    private var sectionPicker: some View {
-        Picker("Section", selection: $repository.section) {
-            Text(label("Changes", repository.status.entries.filter { $0.kind != .unmerged }.count)).tag(RepositorySection.changes)
-            Text("History").tag(RepositorySection.history)
-            Text(label("Conflicts", repository.files.count)).tag(RepositorySection.conflicts)
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .padding(10)
-        .accessibilityIdentifier("section-picker")
-    }
-
-    private func label(_ title: String, _ count: Int) -> String {
-        count > 0 ? "\(title) \(count)" : title
+        .onAppear { repository.startWatching() }
+        .onDisappear { repository.stopWatching() }
+        .modifier(RepositoryDialogs(repository: repository, app: app, promptText: $promptText, messageText: $messageText))
     }
 
     @ViewBuilder
     private var sidebar: some View {
         switch repository.section {
         case .changes: ChangesSidebar(repository: repository, app: app)
-        case .history: HistorySidebar(repository: repository)
+        case .branches: BranchesSidebar(repository: repository, app: app)
+        case .history: HistorySidebar(repository: repository, app: app)
+        case .stash: StashSidebar(repository: repository, app: app)
+        case .tags: TagsSidebar(repository: repository, app: app)
+        case .remotes: RemotesSidebar(repository: repository, app: app)
+        case .reflog: ReflogSidebar(repository: repository, app: app)
+        case .worktrees: WorktreesSidebar(repository: repository, app: app)
+        case .submodules: SubmodulesSidebar(repository: repository, app: app)
         case .conflicts: ConflictsSidebar(repository: repository)
         }
     }
@@ -69,8 +73,26 @@ struct RepositoryView: View {
         switch repository.section {
         case .changes:
             ChangesDetailView(repository: repository, app: app)
+        case .branches:
+            BranchesDetail(repository: repository, app: app)
         case .history:
-            HistoryDetailView(repository: repository)
+            HistoryDetailView(repository: repository, app: app, model: repository.history)
+        case .stash:
+            CommitViewerDetail(repository: repository, app: app, emptyTitle: "Select a stash")
+        case .tags:
+            CommitViewerDetail(repository: repository, app: app, emptyTitle: "Select a tag")
+        case .reflog:
+            CommitViewerDetail(repository: repository, app: app, emptyTitle: "Select a reflog entry")
+        case .remotes:
+            RemotesDetail(repository: repository, app: app)
+        case .worktrees:
+            ContentUnavailableView("Worktrees", systemImage: "square.stack.3d.up",
+                                   description: Text("Each worktree is another checkout of this repository. Right-click one to open it."))
+                .background(.theme(.background))
+        case .submodules:
+            ContentUnavailableView("Submodules", systemImage: "shippingbox",
+                                   description: Text("Repositories nested inside this one. Right-click one to update or open it."))
+                .background(.theme(.background))
         case .conflicts:
             if let file = repository.selectedFile {
                 FileDetailView(repository: repository, file: file, app: app)
@@ -85,6 +107,50 @@ struct RepositoryView: View {
                 )
                 .background(.theme(.background))
             }
+        }
+    }
+}
+
+/// The sections as a grid of small buttons, with counts.
+struct SectionGrid: View {
+    let repository: RepositoryModel
+
+    private let columns = [GridItem(.adaptive(minimum: 92), spacing: 4)]
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 4) {
+            ForEach(RepositorySection.allCases) { section in
+                Button {
+                    repository.section = section
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: section.symbol).frame(width: 14)
+                        Text(section.rawValue).lineLimit(1)
+                        if let count = count(section), count > 0 {
+                            Text("\(count)").font(.caption2.monospacedDigit().weight(.semibold))
+                        }
+                    }
+                    .font(.callout)
+                    .frame(maxWidth: .infinity, minHeight: 24)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(.theme(repository.section == section ? .accentSubtle : .surfaceRaised)))
+                    .foregroundStyle(.theme(repository.section == section ? .accentText : .text))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(repository.section == section ? .isSelected : [])
+                .accessibilityIdentifier("section-\(section.rawValue)")
+            }
+        }
+        .padding(8)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("section-picker")
+    }
+
+    private func count(_ section: RepositorySection) -> Int? {
+        switch section {
+        case .changes: repository.status.entries.filter { $0.kind != .unmerged }.count
+        case .stash: repository.stashes.count
+        case .conflicts: repository.files.count
+        default: nil
         }
     }
 }

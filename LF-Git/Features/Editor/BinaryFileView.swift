@@ -44,7 +44,7 @@ struct BinaryFileView: View {
             .frame(width: 220, height: 160)
             Button("Use \(title)") {
                 Task {
-                    do { try await repository.takeSide(side, of: file.path) } catch { app.errorMessage = "\(error)" }
+                    do { try await repository.takeSide(side, of: file.path) } catch { app.report(error) }
                 }
             }
             .buttonStyle(.borderedProminent)

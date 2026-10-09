@@ -13,6 +13,8 @@ struct HunkAction {
 struct DiffTableView: NSViewRepresentable {
     let diff: GitDiffFile
     var hunkAction: HunkAction?
+    /// The diff lines (1-based) the user selected, when lines can be picked (staging single lines).
+    var selection: Binding<Set<Int>>?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(diff: diff)
@@ -23,7 +25,8 @@ struct DiffTableView: NSViewRepresentable {
         table.headerView = nil
         table.rowHeight = EditorMetrics.rowHeight
         table.intercellSpacing = .zero
-        table.selectionHighlightStyle = .none
+        table.selectionHighlightStyle = selection == nil ? .none : .regular
+        table.allowsMultipleSelection = selection != nil
         table.backgroundColor = .theme(.background)
         table.style = .plain
         table.columnAutoresizingStyle = .noColumnAutoresizing
@@ -46,6 +49,7 @@ struct DiffTableView: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.hunkAction = hunkAction
+        context.coordinator.selection = selection
         context.coordinator.show(diff)
     }
 
@@ -53,6 +57,7 @@ struct DiffTableView: NSViewRepresentable {
         private(set) var diff: GitDiffFile
         weak var table: NSTableView?
         var hunkAction: HunkAction?
+        var selection: Binding<Set<Int>>?
         private var hunkAtHeader: [Int: DiffHunk] = [:]
         private var gutterWidth: CGFloat = 40
 
@@ -76,8 +81,15 @@ struct DiffTableView: NSViewRepresentable {
             }
             diff = newDiff
             prepare()
+            table?.deselectAll(nil)
             table?.reloadData()
             table?.scroll(.zero)
+        }
+
+        func tableViewSelectionDidChange(_ notification: Notification) {
+            guard let selection, let table else { return }
+            let lines = Set(table.selectedRowIndexes.map { $0 + 1 })
+            if lines != selection.wrappedValue { selection.wrappedValue = lines }
         }
 
         private func refreshVisibleHunkButtons() {

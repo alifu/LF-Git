@@ -10,6 +10,16 @@ struct AppCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("Open Repository…") { app.chooseRepository() }
                 .keyboardShortcut("o")
+            Menu("Open Recent") {
+                ForEach(app.recentRepositories, id: \.self) { path in
+                    Button(path) { app.open(URL(fileURLWithPath: path)) }
+                }
+                if !app.recentRepositories.isEmpty {
+                    Divider()
+                    Button("Clear Menu") { app.clearRecentRepositories() }
+                }
+            }
+            .disabled(app.recentRepositories.isEmpty)
         }
         CommandGroup(replacing: .saveItem) {
             Button("Save") {
@@ -27,6 +37,25 @@ struct AppCommands: Commands {
                 .disabled(editor?.canRedo != true)
         }
         CommandMenu("Repository") {
+            Button("Command Palette…") { repository?.showsPalette = true }
+                .keyboardShortcut("k")
+                .disabled(repository == nil)
+            Button("Command Log") { repository?.showsCommandLog = true }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
+                .disabled(repository == nil)
+            Button("Keyboard Shortcuts") { repository?.showsHelp = true }
+                .keyboardShortcut("/")
+                .disabled(repository == nil)
+            Divider()
+            ForEach(Array(RepositorySection.allCases.enumerated()), id: \.element) { index, section in
+                Button("Show \(section.rawValue)") { repository?.section = section }
+                    .keyboardShortcut(KeyEquivalent(Character(index < 9 ? "\(index + 1)" : "0")), modifiers: .control)
+                    .disabled(repository == nil)
+            }
+            Divider()
+            Button("Undo Last Git Move") { run { try await $0.undoHeadMove() } }
+                .keyboardShortcut("z", modifiers: [.command, .option])
+            Divider()
             Button("Fetch") { run { try await $0.fetch() } }
                 .keyboardShortcut("f", modifiers: [.command, .option])
             Button("Pull") { run { try await $0.pull() } }
@@ -60,7 +89,7 @@ struct AppCommands: Commands {
     private func run(_ work: @escaping (RepositoryModel) async throws -> Void) {
         guard let repository, !repository.isBusy, repository.operation == nil else { return }
         Task {
-            do { try await work(repository) } catch { app.errorMessage = "\(error)" }
+            do { try await work(repository) } catch { app.report(error) }
         }
     }
 

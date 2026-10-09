@@ -1,3 +1,4 @@
+import AppKit
 import LFKit
 import SwiftUI
 
@@ -74,7 +75,7 @@ struct ChangesSidebar: View {
 
     private func run(_ work: @escaping () async throws -> Void) {
         Task {
-            do { try await work() } catch { app.errorMessage = "\(error)" }
+            do { try await work() } catch { app.report(error) }
         }
     }
 }
@@ -112,7 +113,7 @@ private struct ChangeRow: View {
                 Task {
                     do {
                         if staged { try await repository.changes.unstage(change) } else { try await repository.changes.stage([change.path]) }
-                    } catch { app.errorMessage = "\(error)" }
+                    } catch { app.report(error) }
                 }
             } label: {
                 Image(systemName: staged ? "minus.circle" : "plus.circle")
@@ -123,12 +124,50 @@ private struct ChangeRow: View {
         }
         .padding(.vertical, 1)
         .contextMenu {
+            Button(staged ? "Unstage" : "Stage") {
+                app.run { staged ? try await repository.changes.unstage(change) : try await repository.changes.stage([change.path]) }
+            }
             if !staged {
                 Button("Discard Changes…", role: .destructive) { discarding = [change] }
+            }
+            Divider()
+            Menu("Ignore") {
+                Button("Add to .gitignore") { ignore(.gitignore) }
+                Button("Add to Local Exclude (.git/info/exclude)") { ignore(.localExclude) }
+            }
+            Menu("Stash This File") {
+                Button("Stash…") { stash(includeUntracked: change.kind == .untracked) }
+            }
+            Button("File History") {
+                repository.section = .history
+                repository.history.filter = GitLogFilter(path: change.path, followRenames: true)
+                Task { await repository.history.reload() }
+            }
+            Divider()
+            Button("Copy Path") { Clipboard.copy(change.path) }
+            Button("Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([repository.root.appendingPathComponent(change.path)])
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("change-\(staged ? "staged" : "unstaged")-\(change.path)")
+    }
+
+    private func ignore(_ scope: IgnoreScope) {
+        let path = change.path
+        app.run { try await repository.perform("Ignoring…") { client, _ in try client.ignore([path], scope: scope) } }
+    }
+
+    private func stash(includeUntracked: Bool) {
+        let path = change.path
+        repository.ask(PendingPrompt(title: "Stash \(name)", message: "A name helps you find it later (optional).",
+                                     placeholder: "Message", confirmTitle: "Stash") { message in
+            app.run {
+                try await repository.perform("Stashing…") { client, _ in
+                    try client.stashPush(message: message, includeUntracked: includeUntracked, paths: [path])
+                }
+            }
+        })
     }
 
     private var color: LFThemeToken {
@@ -189,10 +228,15 @@ struct CommitBox: View {
                 .toggleStyle(.checkbox)
                 .font(.callout)
                 .accessibilityIdentifier("amend")
+                Toggle("Skip hooks", isOn: $changes.noVerify)
+                    .toggleStyle(.checkbox)
+                    .font(.callout)
+                    .help("Commit with --no-verify: pre-commit and commit-msg hooks do not run")
+                    .accessibilityIdentifier("no-verify")
                 Spacer()
                 Button(changes.amend ? "Amend" : "Commit") {
                     Task {
-                        do { try await changes.commit() } catch { app.errorMessage = "\(error)" }
+                        do { try await changes.commit() } catch { app.report(error) }
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -219,6 +263,7 @@ struct CommitBox: View {
 struct ChangesDetailView: View {
     let repository: RepositoryModel
     let app: AppModel
+    @State private var lineSelection: Set<Int> = []
 
     private var changes: ChangesModel { repository.changes }
 
@@ -228,6 +273,10 @@ struct ChangesDetailView: View {
                 VStack(spacing: 0) {
                     header(selection: selection, change: change)
                     Divider()
+                    if canPickLines(selection: selection, change: change), let diff = changes.diff {
+                        LineSelectionBar(repository: repository, app: app, diff: diff, selection: $lineSelection, staged: selection.staged)
+                        Divider()
+                    }
                     content(selection: selection, change: change)
                 }
             } else {
@@ -245,6 +294,7 @@ struct ChangesDetailView: View {
                 Text(change.path).font(.caption).foregroundStyle(.theme(.textSubtle)).lineLimit(1).truncationMode(.head)
             }
             Spacer()
+            DiffOptionsMenu(changes: changes)
             Text(selection.staged ? "Staged" : "Not staged")
                 .font(.callout)
                 .foregroundStyle(.theme(selection.staged ? .accentText : .textSubtle))
@@ -252,7 +302,7 @@ struct ChangesDetailView: View {
                 Task {
                     do {
                         if selection.staged { try await changes.unstage(change) } else { try await changes.stage([change.path]) }
-                    } catch { app.errorMessage = "\(error)" }
+                    } catch { app.report(error) }
                 }
             }
         }
@@ -264,7 +314,8 @@ struct ChangesDetailView: View {
     @ViewBuilder
     private func content(selection: ChangeSelection, change: GitChange) -> some View {
         if let diff = changes.diff {
-            DiffContentView(diff: diff, hunkAction: hunkAction(selection: selection, change: change))
+            DiffContentView(diff: diff, hunkAction: hunkAction(selection: selection, change: change),
+                            lineSelection: canPickLines(selection: selection, change: change) ? $lineSelection : nil)
         } else if let error = changes.diffError {
             ContentUnavailableView("Cannot show the diff", systemImage: "exclamationmark.triangle", description: Text(error))
         } else {
@@ -272,14 +323,19 @@ struct ChangesDetailView: View {
         }
     }
 
+    private func canPickLines(selection: ChangeSelection, change: GitChange) -> Bool {
+        changes.diffSelection == selection && change.kind == .ordinary && changes.diff?.isStageable == true
+            && (selection.staged ? change.index : change.worktree) == .modified
+    }
+
     /// Single hunks can be staged for ordinary modifications; new, deleted and renamed files go as a whole.
     private func hunkAction(selection: ChangeSelection, change: GitChange) -> HunkAction? {
         // Only while the diff on screen belongs to the selected row, and no git command is running.
-        guard changes.diffSelection == selection, !repository.isBusy, change.kind == .ordinary,
+        guard changes.diffSelection == selection, !repository.isBusy, change.kind == .ordinary, changes.diff?.isStageable == true,
               (selection.staged ? change.index : change.worktree) == .modified else { return nil }
         return HunkAction(title: selection.staged ? "Unstage Hunk" : "Stage Hunk") { diff, hunk in
             Task {
-                do { try await changes.applyHunk(hunk, of: diff) } catch { app.errorMessage = "\(error)" }
+                do { try await changes.applyHunk(hunk, of: diff) } catch { app.report(error) }
             }
         }
     }
@@ -289,6 +345,7 @@ struct ChangesDetailView: View {
 struct DiffContentView: View {
     let diff: GitDiffFile
     var hunkAction: HunkAction?
+    var lineSelection: Binding<Set<Int>>?
 
     var body: some View {
         if diff.index.isBinary {
@@ -299,7 +356,7 @@ struct DiffContentView: View {
         } else if diff.lineCount == 0 {
             ContentUnavailableView("No differences", systemImage: "equal.circle")
         } else {
-            DiffTableView(diff: diff, hunkAction: hunkAction)
+            DiffTableView(diff: diff, hunkAction: hunkAction, selection: lineSelection)
         }
     }
 }

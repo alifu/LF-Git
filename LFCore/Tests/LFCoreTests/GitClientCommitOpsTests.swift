@@ -295,3 +295,19 @@ struct GitClientCommitOpsTests {
         #expect(fixture.read("a.txt") == "1\n")
     }
 }
+
+@Suite("Git client: ordering commits for a cherry-pick")
+struct CommitOrderingTests {
+    @Test("an ancestor comes before its descendants whatever the copy order or timestamps")
+    func ordering() throws {
+        let fixture = try GitFixture()
+        for name in ["a", "b", "c"] { try fixture.commit("\(name).txt", "\(name)\n", message: name) }
+        let client = GitClient(directory: fixture.directory)
+        let log = try client.log() // c, b, a — all within the same second
+
+        let sorted = try client.sortedOldestFirst(log)
+
+        #expect(sorted.map(\.subject) == ["a", "b", "c"])
+        #expect(try client.sortedOldestFirst([log[1], log[2], log[0]]).map(\.subject) == ["a", "b", "c"])
+    }
+}

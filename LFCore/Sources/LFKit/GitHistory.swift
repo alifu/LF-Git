@@ -93,7 +93,7 @@ extension GitClient {
             .compactMap { Self.commit(fromRecord: String(decoding: $0, as: UTF8.self)) }
     }
 
-    private static func commit(fromRecord record: String) -> GitCommit? {
+    static func commit(fromRecord record: String) -> GitCommit? {
         let fields = record.components(separatedBy: fieldSeparator)
         guard fields.count >= 7, !fields[0].isEmpty else { return nil }
         // The subject is last; if it contains the field separator itself, put it back together.
@@ -209,5 +209,24 @@ public struct CommitGraph: Sendable, Equatable {
 
         return Row(lane: lane, laneCount: widest, hasLineAbove: hasLineAbove, continuesDown: !commit.parents.isEmpty,
                    passingLanes: passing, mergedLanes: merged, branchedLanes: branched.sorted())
+    }
+}
+
+extension GitClient {
+    /// One commit by hash, tag or branch name.
+    public func commit(for revision: String) throws -> GitCommit? {
+        try requireName(revision, what: "revision")
+        let format = ["%H", "%P", "%an", "%ae", "%at", "%D", "%s"].joined(separator: "%x1f")
+        let result = try git.run(["log", "-1", "-z", "--decorate=short", "--format=\(format)", revision, "--"],
+                                 allowedStatuses: [0, 128])
+        guard result.status == 0 else { return nil }
+        return Self.commit(fromRecord: String(decoding: result.stdout.prefix { $0 != 0 }, as: UTF8.self))
+    }
+}
+
+extension GitClient {
+    /// The whole message of a commit (subject and body).
+    public func message(of commit: GitCommit) throws -> String {
+        try git.run(["log", "-1", "--format=%B", commit.hash, "--"]).text
     }
 }

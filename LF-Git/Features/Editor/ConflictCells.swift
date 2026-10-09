@@ -23,6 +23,10 @@ final class ConflictRowView: NSTableRowView {
             NSColor.theme(background).setFill()
             bounds.fill()
         }
+        if isSelected {
+            NSColor.theme(.accentSubtle).withAlphaComponent(0.7).setFill()
+            bounds.fill()
+        }
         if focused {
             NSColor.theme(.accent).setFill()
             NSRect(x: 0, y: 0, width: EditorMetrics.focusBarWidth, height: bounds.height).fill()
