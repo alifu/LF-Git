@@ -1,6 +1,7 @@
 import Foundation
 @testable import LFGitCLI
 import LFKit
+import LFTestSupport
 
 /// Keeps the user's own git configuration (merge.conflictStyle, hooks, signing...) out of the tests.
 private let isolatedGitEnvironment: Void = {
@@ -36,6 +37,7 @@ struct ConflictSpec {
     let base: [UInt8]
     let ours: [UInt8]
     let theirs: [UInt8]
+    var theirsDeletes = false
 
     init(path: String, base: String, ours: String, theirs: String) {
         self.init(path: path, base: Array(base.utf8), ours: Array(ours.utf8), theirs: Array(theirs.utf8))
@@ -87,7 +89,13 @@ final class GitFixture {
         for spec in specs { sandbox.write(spec.path, bytes: spec.base) }
         try commitAll("base")
         try git.run(["checkout", "-q", "-b", "feature"])
-        for spec in specs { sandbox.write(spec.path, bytes: spec.theirs) }
+        for spec in specs {
+            if spec.theirsDeletes {
+                try FileManager.default.removeItem(atPath: sandbox.path(spec.path))
+            } else {
+                sandbox.write(spec.path, bytes: spec.theirs)
+            }
+        }
         try commitAll("theirs")
         try git.run(["checkout", "-q", "main"])
         for spec in specs { sandbox.write(spec.path, bytes: spec.ours) }

@@ -1,6 +1,7 @@
 import Foundation
 @testable import LFGitCLI
 import LFKit
+import LFTestSupport
 import Testing
 
 @Suite("lfgit driver")

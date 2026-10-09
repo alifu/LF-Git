@@ -1,7 +1,8 @@
 import Foundation
 import LFCore
-import Testing
 @testable import LFKit
+import LFTestSupport
+import Testing
 
 private let simpleConflict = text(
     "before", "<<<<<<< HEAD", "ours1", "ours2", "=======", "theirs1", ">>>>>>> feature", "after"

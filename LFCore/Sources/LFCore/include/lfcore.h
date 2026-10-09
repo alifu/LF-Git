@@ -180,6 +180,43 @@ lf_status lf_doc_set_custom(lf_doc *doc, uint64_t index, const uint8_t *data, si
  */
 lf_status lf_doc_save(lf_doc *doc, const char *dest_path, uint32_t flags);
 
+/* ---- Semantic merge of Xcode project files ----------------------------- */
+
+typedef struct lf_merge_options {
+    uint32_t marker_size;       /* 0 means LF_DEFAULT_MARKER_SIZE */
+    int include_base;           /* write a "|||||||" base section in conflicts (diff3 style) */
+    const char *current_label;  /* NULL means "HEAD" */
+    const char *base_label;     /* NULL means "base" */
+    const char *incoming_label; /* NULL means "incoming" */
+} lf_merge_options;
+
+typedef struct lf_merge_result {
+    uint8_t *data; /* merged file, owned: release with lf_merge_result_free */
+    size_t length;
+    uint64_t conflict_count;      /* conflict blocks written with markers */
+    uint64_t merged_object_count; /* objects changed on both sides and merged without conflict */
+} lf_merge_result;
+
+/*
+ * Three-way merge of project.pbxproj contents (base = common ancestor).
+ *
+ * Objects are matched by ID. An object changed on one side takes that side's text verbatim;
+ * objects changed on both sides are merged field by field (nested dictionaries key by key,
+ * lists of IDs as ordered sets). Real disagreements become small conflict blocks around the
+ * object or the setting, so each side stays a valid project when picked. A deletion that the
+ * other side still references becomes a conflict instead of a dangling reference.
+ *
+ * Fails with LF_ERR_UNSUPPORTED (and changes nothing) when an input is not a project file
+ * written in Xcode's format; callers should then fall back to a line-based merge.
+ * options may be NULL (diff3 style, default labels and marker size).
+ */
+lf_status lf_pbx_merge(const uint8_t *base, size_t base_length, const uint8_t *ours, size_t ours_length,
+                       const uint8_t *theirs, size_t theirs_length, const lf_merge_options *options,
+                       lf_merge_result *out);
+
+/* Releases the merged text. Accepts a zeroed or already-freed result. */
+void lf_merge_result_free(lf_merge_result *result);
+
 #ifdef __cplusplus
 }
 #endif

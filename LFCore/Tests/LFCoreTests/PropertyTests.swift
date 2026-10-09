@@ -1,7 +1,8 @@
 import Foundation
 import LFCore
-import Testing
 @testable import LFKit
+import LFTestSupport
+import Testing
 
 /// Builds random well-formed conflicted files together with the expected result of every choice.
 private struct GeneratedFile {

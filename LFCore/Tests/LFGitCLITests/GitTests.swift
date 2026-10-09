@@ -1,5 +1,6 @@
 import Foundation
 import LFKit
+import LFTestSupport
 import Testing
 
 @Suite("Git helper")

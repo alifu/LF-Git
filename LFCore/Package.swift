@@ -36,13 +36,19 @@ let package = Package(
             name: "lf-bench",
             dependencies: ["LFKit"]
         ),
+        // Helpers for the test suites only (temporary directories, a realistic Xcode project generator).
+        .target(
+            name: "LFTestSupport",
+            path: "Sources/LFTestSupport"
+        ),
         .testTarget(
             name: "LFCoreTests",
-            dependencies: ["LFCore", "LFKit"]
+            dependencies: ["LFCore", "LFKit", "LFTestSupport"],
+            exclude: ["Fixtures"]
         ),
         .testTarget(
             name: "LFGitCLITests",
-            dependencies: ["LFGitCLI", "LFKit"]
+            dependencies: ["LFGitCLI", "LFKit", "LFTestSupport"]
         ),
     ],
     cLanguageStandard: .c11

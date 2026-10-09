@@ -23,6 +23,7 @@ public struct StatusCommand: ParsableCommand {
     public init() {}
 
     private enum Kind {
+        case project(conflicts: Int)
         case text(conflicts: Int)
         case binary
         case unreadable(String)
@@ -47,6 +48,9 @@ public struct StatusCommand: ParsableCommand {
             console.line(format(row.path, kind: row.kind, width: width, palette: console.palette,
                                 size: fileSize(root.appendingPathComponent(row.path).path)))
         }
+        if rows.contains(where: { if case .project = $0.kind { true } else { false } }) {
+            console.line("\nRun `lfgit remerge` to merge Xcode project files object by object.")
+        }
         return 0
     }
 
@@ -56,7 +60,8 @@ public struct StatusCommand: ParsableCommand {
                 return .binary
             }
             let document = try LFDocument(path: absolutePath, markerSize: git.markerSize(forPath: absolutePath))
-            return .text(conflicts: document.info.conflictCount)
+            let conflicts = document.info.conflictCount
+            return MergeStrategy.forPath(absolutePath) == .pbxproj ? .project(conflicts: conflicts) : .text(conflicts: conflicts)
         } catch {
             return .unreadable("\(error)")
         }
@@ -74,9 +79,10 @@ public struct StatusCommand: ParsableCommand {
             return palette.paint(text, color)
         }
         switch kind {
-        case .text(let conflicts):
+        case .project(let conflicts), .text(let conflicts):
+            let type = if case .project = kind { "pbxproj" } else { "text   " }
             let note = conflicts == 0 ? "no markers" : plural(conflicts, "conflict")
-            return "  U  \(padded)  text    \(tint(note, conflicts == 0 ? palette?.muted : palette?.danger))  \(size)"
+            return "  U  \(padded)  \(type) \(tint(note, conflicts == 0 ? palette?.muted : palette?.danger))  \(size)"
         case .binary:
             return "  U  \(padded)  \(tint("binary", palette?.muted))  \(size)"
         case .unreadable(let reason):

@@ -9,6 +9,7 @@ public struct LFGitCommand: ParsableCommand {
         subcommands: [
             StatusCommand.self,
             ResolveCommand.self,
+            RemergeCommand.self,
             InteractiveCommand.self,
             MergetoolCommand.self,
             DriverCommand.self,

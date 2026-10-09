@@ -97,6 +97,18 @@ public struct Git: Sendable {
         return result.stdout.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }
     }
 
+    /// Unmerged paths that one side deleted and the other changed (a modify/delete conflict).
+    public func modifyDeletePaths() throws(GitError) -> [String] {
+        // Each line: "<mode> <object> <stage>\t<path>"; stage 1 = base, 2 = ours, 3 = theirs.
+        var stages: [String: Set<Character>] = [:]
+        for record in try run(["ls-files", "-u", "-z"]).stdout.split(separator: 0) {
+            let line = String(decoding: record, as: UTF8.self)
+            guard let tab = line.firstIndex(of: "\t"), let stage = line[..<tab].last else { continue }
+            stages[String(line[line.index(after: tab)...]), default: []].insert(stage)
+        }
+        return stages.filter { $0.value.contains("1") && $0.value.count == 2 }.map(\.key).sorted()
+    }
+
     /// Length of conflict marker runs for a file: the `conflict-marker-size` attribute, or 7.
     public func markerSize(forPath path: String) -> Int {
         guard let result = try? run(["check-attr", "conflict-marker-size", "--", path]),

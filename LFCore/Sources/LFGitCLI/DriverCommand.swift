@@ -8,8 +8,10 @@ public struct DriverCommand: ParsableCommand {
         abstract: "Git merge driver (see `lfgit install --attributes`).",
         discussion: """
         Merges OTHER into CURRENT using ANCESTOR as the base and writes the result to CURRENT. \
-        Exits 0 when the merge is clean and 1 when conflicts remain. Conflicts use diff3 markers, \
-        so the common ancestor stays available to `lfgit resolve --all-base` and the merge tools.
+        Exits 0 when the merge is clean and 1 when conflicts remain. Xcode project files \
+        (*.pbxproj) are merged object by object; other files, and project files in an unknown \
+        layout, line by line. Conflicts use diff3 markers, so the common ancestor stays \
+        available to `lfgit resolve --all-base` and the merge tools.
         """
     )
 
@@ -29,6 +31,39 @@ public struct DriverCommand: ParsableCommand {
     }
 
     public func execute(console: Console) throws -> Int32 {
+        if MergeStrategy.forPath(pathname) == .pbxproj, let code = mergeProject(console: console) {
+            return code
+        }
+        return mergeLines(console: console)
+    }
+
+    /// Object-level merge; nil means "use the line-based merge instead".
+    private func mergeProject(console: Console) -> Int32? {
+        do {
+            let result = try PbxprojMerge.merge(
+                base: try readBytes(ancestor), ours: try readBytes(current), theirs: try readBytes(other),
+                markerSize: max(markerSize, 1)
+            )
+            guard !result.isClean || PropertyListCheck.isValid(result.bytes) else {
+                console.errorLine("lfgit: \(pathname): the merged project did not validate; using a line-based merge")
+                return nil
+            }
+            try Data(result.bytes).write(to: URL(fileURLWithPath: current), options: .atomic)
+            return result.isClean ? 0 : 1
+        } catch {
+            console.errorLine("lfgit: \(pathname): \(error); using a line-based merge")
+            return nil
+        }
+    }
+
+    private func readBytes(_ path: String) throws -> [UInt8] {
+        guard let data = FileManager.default.contents(atPath: path) else {
+            throw CLIError("cannot read \(path)")
+        }
+        return Array(data)
+    }
+
+    private func mergeLines(console: Console) -> Int32 {
         let directory = URL(fileURLWithPath: current).deletingLastPathComponent()
         let arguments = [
             "merge-file", "--diff3", "--marker-size=\(max(markerSize, 1))",

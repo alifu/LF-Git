@@ -2,7 +2,7 @@
 
 A native macOS merge tool and Git client for resolving conflicts in **files of any size**, from a Swift source file to an Xcode `project.pbxproj` with millions of lines.
 
-> **Status:** early development. The C engine and the `lfgit` command line tool work (phases 1 and 2); the SwiftUI conflict editor and the semantic `.pbxproj` merge are next.
+> **Status:** early development. The C engine, the `lfgit` command line tool and the semantic `.pbxproj` merge work (phases 1–3); the SwiftUI conflict editor is next.
 
 ## Goals
 
@@ -44,12 +44,34 @@ lfgit resolve --all-incoming --stage  # no file arguments = every conflicted fil
 lfgit tui path/to/file                # interactive: [c]urrent [i]ncoming [b]oth [B]oth-reversed [a]ncestor [e]dit [k]eep [q]uit
 lfgit install                         # register as `git mergetool` + merge driver (this repo; --global for all)
 git mergetool                         # now opens lfgit's interactive resolver for each conflicted file
-lfgit install --attributes '*.pbxproj'   # route these files through the lfgit merge driver
+lfgit install --attributes '*.pbxproj'   # merge project files object by object during every merge
+lfgit remerge [--stage]               # already conflicted? re-merge project.pbxproj from git's index (old file kept as .orig)
 ```
 
 - Binary files can take a whole side (`--all-current` / `--all-incoming`).
 - `-C <dir>` works like in git. `NO_COLOR` disables colours.
 - Base sections (`--all-base`, `a` in `tui`) need `git config merge.conflictStyle diff3`; the merge driver always writes diff3 markers.
+
+### Xcode project files
+
+`project.pbxproj` is merged **object by object** instead of line by line: an object changed on one
+side takes that side's text, objects changed on both sides are merged field by field (build
+settings key by key, file lists as ordered sets). Only real disagreements remain, as small conflict
+blocks around one setting or one object, which `lfgit tui` / `resolve` can finish. Safety rules: flag
+lists inside `buildSettings` are never merged as sets, a deletion the other side still uses becomes a
+conflict, and files that are not in Xcode's format fall back to git's line merge.
+
+Replayed on real merge commits of three open-source iOS apps (`LFCore/Scripts/pbxproj_corpus.py`):
+
+| Repository | Both sides changed the project | git conflicted | lfgit resolved those |
+|---|---|---|---|
+| wikimedia/wikipedia-ios | 96 | 22 | 22 |
+| wordpress-mobile/WordPress-iOS | 93 | 8 | 8 |
+| kickstarter/ios-oss | 29 | 15 | 14 (1 broken input left to git) |
+
+No result disagreed with the committed project in a way lfgit could have known. Known limits: a file
+kept by resolving a modify/delete conflict loses its project entry (`lfgit remerge` warns), and two
+differently named files that contain the same code are both kept.
 
 ### Performance
 
