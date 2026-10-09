@@ -8,6 +8,8 @@ let package = Package(
         .library(name: "LFKit", targets: ["LFKit"]),
         .executable(name: "lfgit", targets: ["lfgit"]),
         .executable(name: "lf-bench", targets: ["lf-bench"]),
+        // Test helpers, shared with the app's test target. Not for use in shipping code.
+        .library(name: "LFTestSupport", targets: ["LFTestSupport"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
@@ -39,6 +41,7 @@ let package = Package(
         // Helpers for the test suites only (temporary directories, a realistic Xcode project generator).
         .target(
             name: "LFTestSupport",
+            dependencies: ["LFKit"],
             path: "Sources/LFTestSupport"
         ),
         .testTarget(
