@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		82C428D03078FCD200C5A3AD /* LFKit in Frameworks */ = {isa = PBXBuildFile; productRef = 82C428D13078FCD200C5A3AD /* LFKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		82C428AC3078FCD200C5A3AD /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				82C428D03078FCD200C5A3AD /* LFKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = "LF-Git";
 			packageProductDependencies = (
+				82C428D13078FCD200C5A3AD /* LFKit */,
 			);
 			productName = "LF-Git";
 			productReference = 82C4289E3078FCD100C5A3AD /* LF-Git.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = 82C428953078FCD000C5A3AD;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				82C428D23078FCD200C5A3AD /* XCLocalSwiftPackageReference "LFCore" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 82C4289F3078FCD100C5A3AD /* Products */;
 			projectDirPath = "";
@@ -563,6 +572,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		82C428D23078FCD200C5A3AD /* XCLocalSwiftPackageReference "LFCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LFCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		82C428D13078FCD200C5A3AD /* LFKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LFKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 82C428963078FCD000C5A3AD /* Project object */;
 }

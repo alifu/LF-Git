@@ -1,0 +1,38 @@
+{
+  "colors": [
+    {
+      "color": {
+        "color-space": "srgb",
+        "components": {
+          "alpha": "1.000",
+          "red": "0xC6",
+          "green": "0xED",
+          "blue": "0xFB"
+        }
+      },
+      "idiom": "universal"
+    },
+    {
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ],
+      "color": {
+        "color-space": "srgb",
+        "components": {
+          "alpha": "1.000",
+          "red": "0x16",
+          "green": "0x45",
+          "blue": "0x55"
+        }
+      },
+      "idiom": "universal"
+    }
+  ],
+  "info": {
+    "author": "gen_theme.py",
+    "version": 1
+  }
+}

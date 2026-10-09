@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: LFCore package (build + test)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build --package-path LFCore
+      - name: Test
+        run: swift test --package-path LFCore --enable-code-coverage
+
+  sanitizers:
+    name: LFCore sanitizers (${{ matrix.sanitizer }})
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, undefined]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test with ${{ matrix.sanitizer }} sanitizer
+        run: swift test --package-path LFCore --sanitize=${{ matrix.sanitizer }}
+
+  theme:
+    name: Theme drift + contrast
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check generated theme files and WCAG contrast
+        run: python3 -I LFCore/Scripts/gen_theme.py --check
+
+  app:
+    name: macOS app (build + unit tests)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test
+        run: |
+          xcodebuild -project LF-Git.xcodeproj -scheme LF-Git \
+            -destination 'platform=macOS' \
+            -only-testing:LF-GitTests \
+            CODE_SIGN_IDENTITY=- \
+            test
