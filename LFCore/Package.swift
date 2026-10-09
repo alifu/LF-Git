@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "LFKit", targets: ["LFKit"]),
         .executable(name: "lfgit", targets: ["lfgit"]),
+        .executable(name: "lf-bench", targets: ["lf-bench"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
@@ -25,6 +26,10 @@ let package = Package(
                 "LFKit",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
+        ),
+        .executableTarget(
+            name: "lf-bench",
+            dependencies: ["LFKit"]
         ),
         .testTarget(
             name: "LFCoreTests",
