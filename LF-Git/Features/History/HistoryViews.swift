@@ -194,6 +194,7 @@ struct HistoryDetailView: View {
     let repository: RepositoryModel
     let app: AppModel
     let model: HistoryModel
+    @State private var lineSelection: Set<Int> = []
 
     var body: some View {
         Group {
@@ -219,6 +220,11 @@ struct HistoryDetailView: View {
                     .frame(minHeight: 160)
             }
         }
+    }
+
+    private var canRewrite: Bool {
+        if case .log(let revision) = model.source { return revision == nil && repository.operation == nil }
+        return false
     }
 
     private func comparisonHeader(_ comparison: HistoryModel.Comparison) -> some View {
@@ -304,7 +310,14 @@ struct HistoryDetailView: View {
             if let blame = model.blame {
                 BlameView(lines: blame)
             } else if let diff = model.diff {
-                DiffContentView(diff: diff)
+                if let commit = model.selectedCommit, model.comparison == nil, diff.isDisplayable, !diff.index.isBinary {
+                    CommitLineBar(repository: repository, app: app, diff: diff, commit: commit, selection: $lineSelection,
+                                  canRewrite: canRewrite)
+                    Divider()
+                    DiffContentView(diff: diff, lineSelection: $lineSelection)
+                } else {
+                    DiffContentView(diff: diff)
+                }
             } else if let error = model.detailError {
                 ContentUnavailableView("Cannot show this", systemImage: "exclamationmark.triangle", description: Text(error))
             } else {

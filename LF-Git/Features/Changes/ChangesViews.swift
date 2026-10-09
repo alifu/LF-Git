@@ -144,6 +144,8 @@ private struct ChangeRow: View {
                 Task { await repository.history.reload() }
             }
             Divider()
+            Button("Open File") { NSWorkspace.shared.open(repository.root.appendingPathComponent(change.path)) }
+                .disabled(change.worktree == .deleted)
             Button("Copy Path") { Clipboard.copy(change.path) }
             Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([repository.root.appendingPathComponent(change.path)])
