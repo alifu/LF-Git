@@ -9,7 +9,7 @@ struct StatusTests {
         // Arrange
         let statuses: [lf_status] = [
             LF_OK, LF_ERR_INVALID_ARGUMENT, LF_ERR_IO, LF_ERR_NO_MEMORY,
-            LF_ERR_MALFORMED, LF_ERR_UNRESOLVED, LF_ERR_UNSUPPORTED,
+            LF_ERR_MALFORMED, LF_ERR_UNRESOLVED, LF_ERR_UNSUPPORTED, LF_ERR_CHANGED,
         ]
 
         // Act

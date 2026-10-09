@@ -20,12 +20,17 @@ let package = Package(
             name: "LFKit",
             dependencies: ["LFCore"]
         ),
-        .executableTarget(
-            name: "lfgit",
+        // All lfgit commands live in a library so they can be unit-tested in-process.
+        .target(
+            name: "LFGitCLI",
             dependencies: [
                 "LFKit",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
+        ),
+        .executableTarget(
+            name: "lfgit",
+            dependencies: ["LFGitCLI"]
         ),
         .executableTarget(
             name: "lf-bench",
@@ -34,6 +39,10 @@ let package = Package(
         .testTarget(
             name: "LFCoreTests",
             dependencies: ["LFCore", "LFKit"]
+        ),
+        .testTarget(
+            name: "LFGitCLITests",
+            dependencies: ["LFGitCLI", "LFKit"]
         ),
     ],
     cLanguageStandard: .c11

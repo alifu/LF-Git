@@ -25,6 +25,9 @@ final class Sandbox: @unchecked Sendable {
     @discardableResult
     func write(_ name: String, bytes: [UInt8]) -> String {
         let target = path(name)
+        try? FileManager.default.createDirectory(
+            at: URL(fileURLWithPath: target).deletingLastPathComponent(), withIntermediateDirectories: true
+        )
         guard FileManager.default.createFile(atPath: target, contents: Data(bytes)) else {
             preconditionFailure("cannot write \(target)")
         }

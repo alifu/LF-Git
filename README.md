@@ -2,7 +2,7 @@
 
 A native macOS merge tool and Git client for resolving conflicts in **files of any size**, from a Swift source file to an Xcode `project.pbxproj` with millions of lines.
 
-> **Status:** early development (Phase 0: scaffolding). Not usable yet.
+> **Status:** early development. The C engine and the `lfgit` command line tool work (phases 1 and 2); the SwiftUI conflict editor and the semantic `.pbxproj` merge are next.
 
 ## Goals
 
@@ -34,6 +34,33 @@ swift run --package-path LFCore lfgit --version
 # App
 xcodebuild -project LF-Git.xcodeproj -scheme LF-Git build
 ```
+
+## Command line
+
+```bash
+lfgit status                          # conflicted files: type, number of conflicts, size
+lfgit resolve --all-current  a.txt    # also: --all-incoming, --all-both, --all-both-incoming-first, --all-base
+lfgit resolve --all-incoming --stage  # no file arguments = every conflicted file; --stage runs git add
+lfgit tui path/to/file                # interactive: [c]urrent [i]ncoming [b]oth [B]oth-reversed [a]ncestor [e]dit [k]eep [q]uit
+lfgit install                         # register as `git mergetool` + merge driver (this repo; --global for all)
+git mergetool                         # now opens lfgit's interactive resolver for each conflicted file
+lfgit install --attributes '*.pbxproj'   # route these files through the lfgit merge driver
+```
+
+- Binary files can take a whole side (`--all-current` / `--all-incoming`).
+- `-C <dir>` works like in git. `NO_COLOR` disables colours.
+- Base sections (`--all-base`, `a` in `tui`) need `git config merge.conflictStyle diff3`; the merge driver always writes diff3 markers.
+
+### Performance
+
+`swift run -c release lf-bench` generates a conflicted file and measures it. On an Apple-silicon Mac:
+
+| File | Open + index + scan (warm) |
+|---|---|
+| 10 million lines (305 MB), 10,000 conflicts | 0.07 s |
+| 100 million lines (3.1 GB), 100,000 conflicts | 0.8 s |
+
+Files are memory-mapped and indexed sparsely (one offset per 1024 lines), so memory use stays small.
 
 ### Theme
 

@@ -35,6 +35,7 @@ typedef enum lf_status {
     LF_ERR_MALFORMED = 4,
     LF_ERR_UNRESOLVED = 5,
     LF_ERR_UNSUPPORTED = 6,
+    LF_ERR_CHANGED = 7, /* the source file changed on disk after it was opened */
 } lf_status;
 
 /* Human-readable description of a status. Never returns NULL. */
@@ -132,7 +133,8 @@ typedef struct lf_conflict_info {
 } lf_conflict_info;
 
 /* Flags for lf_doc_save. */
-#define LF_SAVE_FORCE 1u /* write unresolved conflicts back verbatim instead of failing */
+#define LF_SAVE_FORCE 1u          /* write unresolved conflicts back verbatim instead of failing */
+#define LF_SAVE_IGNORE_CHANGES 2u /* save even if the source file changed since it was opened */
 
 /*
  * Opens a text file, indexes its lines and scans for conflicts in one pass.
@@ -166,11 +168,17 @@ lf_status lf_doc_set_custom(lf_doc *doc, uint64_t index, const uint8_t *data, si
 
 /*
  * Writes the resolved file atomically (temporary file, fsync, rename), keeping
- * the original permissions, encoding, byte-order mark and line endings.
- * dest_path may be NULL to replace the source file. Fails with LF_ERR_UNRESOLVED
- * if conflicts remain and LF_SAVE_FORCE is not set; the destination is then untouched.
+ * the original permissions, encoding, byte-order mark and line endings. A symlink
+ * destination is followed, so the link itself is kept. (Extended attributes, ACLs and
+ * hard links of the old file are not carried over.)
+ * dest_path may be NULL to replace the source file. Fails, leaving the destination
+ * untouched, with LF_ERR_UNRESOLVED if conflicts remain and LF_SAVE_FORCE is not set,
+ * and with LF_ERR_CHANGED if the source file was modified since lf_doc_open (its
+ * offsets would be stale) and LF_SAVE_IGNORE_CHANGES is not set.
+ * Custom text is given a line terminator if it lacks one. After a successful save the
+ * document remembers the new state of the source file, so it can be saved again.
  */
-lf_status lf_doc_save(const lf_doc *doc, const char *dest_path, uint32_t flags);
+lf_status lf_doc_save(lf_doc *doc, const char *dest_path, uint32_t flags);
 
 #ifdef __cplusplus
 }

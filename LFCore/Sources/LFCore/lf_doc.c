@@ -25,7 +25,7 @@ void lf_doc_close(lf_doc *doc) {
     free(doc->line_index);
     free(doc->owned);
     if (doc->map_base != NULL) {
-        lf_mapping mapping = {doc->map_base, doc->map_length, 0};
+        lf_mapping mapping = {.base = doc->map_base, .length = doc->map_length};
         lf_unmap(&mapping);
     }
     free(doc->path);
@@ -77,6 +77,7 @@ lf_status lf_doc_open(const char *path, const lf_open_options *options, lf_doc *
         return lf_fail(LF_ERR_NO_MEMORY, "out of memory opening '%s'", path);
     }
     doc->mode = mapping.mode;
+    doc->source = mapping.info;
     doc->marker_size = (options != NULL && options->marker_size != 0) ? options->marker_size : LF_DEFAULT_MARKER_SIZE;
     doc->path = copy_string(path);
     if (doc->path == NULL) {

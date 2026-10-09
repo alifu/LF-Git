@@ -24,6 +24,7 @@ lf_status lf_map_file(const char *path, lf_mapping *out) {
         close(fd);
         return lf_fail(LF_ERR_INVALID_ARGUMENT, "'%s' is not a regular file", path);
     }
+    out->info = info;
     out->mode = (uint32_t)(info.st_mode & 07777);
     out->length = (size_t)info.st_size;
     if (info.st_size > 0) {

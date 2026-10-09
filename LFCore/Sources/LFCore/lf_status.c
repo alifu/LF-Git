@@ -19,6 +19,8 @@ const char *lf_status_string(lf_status status) {
         return "unresolved conflicts remain";
     case LF_ERR_UNSUPPORTED:
         return "unsupported file";
+    case LF_ERR_CHANGED:
+        return "file changed on disk";
     }
     return "unknown status";
 }

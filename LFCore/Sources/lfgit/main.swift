@@ -1,0 +1,3 @@
+import LFGitCLI
+
+LFGitCommand.main()

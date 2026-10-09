@@ -20,6 +20,24 @@ jobs:
       - name: Test
         run: swift test --package-path LFCore --enable-code-coverage
 
+  c-lint:
+    name: C engine strict warnings
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile with -Wall -Wextra -Wpedantic -Wconversion
+        run: |
+          clang -std=c11 -fsyntax-only -Werror -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+            -Wstrict-prototypes -Wformat=2 -I LFCore/Sources/LFCore/include LFCore/Sources/LFCore/*.c
+
+  benchmark:
+    name: 10M-line benchmark gate
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: open + scan of 10,000,000 lines must take under 1 s
+        run: swift run --package-path LFCore -c release lf-bench --lines 10000000 --conflicts 10000
+
   sanitizers:
     name: LFCore sanitizers (${{ matrix.sanitizer }})
     runs-on: macos-26

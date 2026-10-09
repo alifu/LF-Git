@@ -7,6 +7,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -100,6 +101,17 @@ static lf_status emit_pair(lf_sink *sink, const lf_doc *doc, lf_range first, lf_
     return status != LF_OK ? status : sink_write(sink, doc->data + second.offset, second.length);
 }
 
+/* Custom text must end its last line, or it would fuse with the line that follows the conflict. */
+static lf_status emit_custom(lf_sink *sink, const lf_doc *doc, const lf_conflict_rec *rec) {
+    static const uint8_t lf_bytes[] = "\n";
+    static const uint8_t crlf_bytes[] = "\r\n";
+    const lf_status status = sink_write(sink, rec->custom, rec->custom_len);
+    if (status != LF_OK || rec->custom_len == 0 || rec->custom[rec->custom_len - 1] == '\n') {
+        return status;
+    }
+    return doc->eol == LF_EOL_CRLF ? sink_write(sink, crlf_bytes, 2) : sink_write(sink, lf_bytes, 1);
+}
+
 static lf_status emit_resolution(lf_sink *sink, const lf_doc *doc, const lf_conflict_rec *rec) {
     const lf_range current = {rec->cur_start, rec->cur_end - rec->cur_start};
     const lf_range incoming = {rec->inc_start, rec->inc_end - rec->inc_start};
@@ -115,7 +127,7 @@ static lf_status emit_resolution(lf_sink *sink, const lf_doc *doc, const lf_conf
     case LF_CHOICE_BASE:
         return sink_write(sink, doc->data + rec->base_start, rec->base_end - rec->base_start);
     case LF_CHOICE_CUSTOM:
-        return sink_write(sink, rec->custom, rec->custom_len);
+        return emit_custom(sink, doc, rec);
     case LF_CHOICE_UNRESOLVED:
         break;
     }
@@ -179,23 +191,34 @@ static char *temp_path_for(const char *destination) {
     return path;
 }
 
-static lf_status finish_temp_file(int fd, const char *temp, const char *destination, mode_t mode) {
-    if (fsync(fd) != 0) {
+/* Flushes the temporary file to stable storage and gives it the original permissions. */
+static lf_status sync_and_chmod(int fd, const char *temp, mode_t mode) {
+    /* On macOS fsync() does not reach the platter; F_FULLFSYNC does. Fall back where unsupported. */
+    if (fcntl(fd, F_FULLFSYNC) != 0 && fsync(fd) != 0) {
         return lf_fail_errno(LF_ERR_IO, "sync", temp);
     }
     if (fchmod(fd, mode) != 0) {
         return lf_fail_errno(LF_ERR_IO, "set permissions on", temp);
     }
-    if (close(fd) != 0) {
-        return lf_fail_errno(LF_ERR_IO, "close", temp);
-    }
-    if (rename(temp, destination) != 0) {
-        return lf_fail_errno(LF_ERR_IO, "replace", destination);
-    }
     return LF_OK;
 }
 
-lf_status lf_doc_save(const lf_doc *doc, const char *dest_path, uint32_t flags) {
+static int same_identity(const struct stat *a, const struct stat *b) {
+    return a->st_dev == b->st_dev && a->st_ino == b->st_ino && a->st_size == b->st_size &&
+           a->st_mtimespec.tv_sec == b->st_mtimespec.tv_sec && a->st_mtimespec.tv_nsec == b->st_mtimespec.tv_nsec;
+}
+
+/* The scan offsets are only valid for the bytes that were mapped; refuse to write if they may be stale. */
+static lf_status check_source_unchanged(const lf_doc *doc) {
+    struct stat now;
+    if (stat(doc->path, &now) != 0 || same_identity(&doc->source, &now)) {
+        return LF_OK; /* gone: nothing to clobber */
+    }
+    return lf_fail(LF_ERR_CHANGED, "'%s' changed on disk after it was opened; reopen it so those changes are not lost",
+                   doc->path);
+}
+
+lf_status lf_doc_save(lf_doc *doc, const char *dest_path, uint32_t flags) {
     if (doc == NULL) {
         return lf_fail(LF_ERR_INVALID_ARGUMENT, "lf_doc_save: null document");
     }
@@ -205,7 +228,18 @@ lf_status lf_doc_save(const lf_doc *doc, const char *dest_path, uint32_t flags) 
             return unresolved;
         }
     }
+    if (!(flags & LF_SAVE_IGNORE_CHANGES)) {
+        const lf_status changed = check_source_unchanged(doc);
+        if (changed != LF_OK) {
+            return changed;
+        }
+    }
+    /* Write through symlinks, so the link survives and its target is updated. */
+    char resolved[PATH_MAX];
     const char *destination = dest_path != NULL ? dest_path : doc->path;
+    if (realpath(destination, resolved) != NULL) {
+        destination = resolved;
+    }
     char *temp = temp_path_for(destination);
     if (temp == NULL) {
         return lf_fail(LF_ERR_NO_MEMORY, "out of memory while saving");
@@ -226,12 +260,22 @@ lf_status lf_doc_save(const lf_doc *doc, const char *dest_path, uint32_t flags) 
         status = needs_reencoding ? write_encoded(fd, doc, &sink, temp) : sink_flush(&sink);
     }
     if (status == LF_OK) {
-        status = finish_temp_file(fd, temp, destination, mode);
-    } else {
-        close(fd);
+        status = sync_and_chmod(fd, temp, mode);
+    }
+    if (close(fd) != 0 && status == LF_OK) {
+        status = lf_fail_errno(LF_ERR_IO, "close", temp);
+    }
+    if (status == LF_OK && rename(temp, destination) != 0) {
+        status = lf_fail_errno(LF_ERR_IO, "replace", destination);
     }
     if (status != LF_OK) {
         unlink(temp);
+    } else {
+        /* The source may just have been replaced; remember its new identity so a second save is allowed. */
+        struct stat after;
+        if (stat(doc->path, &after) == 0) {
+            doc->source = after;
+        }
     }
     free(sink.buffer);
     free(temp);

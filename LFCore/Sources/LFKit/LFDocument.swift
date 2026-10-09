@@ -80,8 +80,15 @@ public final class LFDocument {
     }
 
     /// Writes the resolved file atomically. `path` defaults to the source file.
-    public func save(to path: String? = nil, force: Bool = false) throws(LFError) {
-        let flags: UInt32 = force ? LF_SAVE_FORCE : 0
+    ///
+    /// - Parameters:
+    ///   - force: write unresolved conflicts back verbatim instead of failing.
+    ///   - ignoreChanges: save even if the source file changed on disk after it was opened
+    ///     (by default that fails with `LF_ERR_CHANGED`, because the conflict offsets would be stale).
+    public func save(to path: String? = nil, force: Bool = false, ignoreChanges: Bool = false) throws(LFError) {
+        var flags: UInt32 = 0
+        if force { flags |= LF_SAVE_FORCE }
+        if ignoreChanges { flags |= LF_SAVE_IGNORE_CHANGES }
         let status: lf_status
         if let path {
             status = path.withCString { lf_doc_save(handle, $0, flags) }

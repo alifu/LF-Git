@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/stat.h>
 
 /* One line offset is stored per this many lines; must be a power of two. */
 #define LF_LINE_INDEX_STRIDE 1024u
@@ -35,6 +36,7 @@ struct lf_doc {
     size_t map_length;
     uint8_t *owned;
     uint32_t mode; /* permission bits of the source file */
+    struct stat source; /* identity of the source file when it was opened */
     uint32_t marker_size;
     uint32_t bom_skip; /* bytes at the start of `data` that are not part of line 1's content */
     lf_encoding encoding;
@@ -50,6 +52,7 @@ typedef struct lf_mapping {
     void *base; /* NULL for empty files */
     size_t length;
     uint32_t mode;
+    struct stat info;
 } lf_mapping;
 
 /* lf_error.c */

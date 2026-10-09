@@ -460,6 +460,87 @@ struct ResolveTests {
         #expect(mode == 0o755)
     }
 
+    @Test("saving through a symlink updates the target and keeps the link")
+    func symlinkKept() throws {
+        let box = Sandbox()
+        let target = box.write("real.txt", simpleConflict)
+        let link = box.path("link.txt")
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: target)
+        let doc = try LFDocument(path: link)
+        try doc.resolveAll(as: .incoming)
+
+        try doc.save()
+
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: link)) == target)
+        #expect(box.readText(target) == text("before", "theirs1", "after"))
+    }
+
+    @Test("saving refuses to overwrite a file that changed after it was opened")
+    func changedSourceRefused() throws {
+        let box = Sandbox()
+        let path = box.write("a.txt", simpleConflict)
+        let doc = try LFDocument(path: path)
+        try doc.resolveAll(as: .current)
+        let theirEdit = "someone else edited this file while it was open\n"
+        box.write("a.txt", theirEdit)
+
+        do {
+            try doc.save()
+            Issue.record("expected the save to be refused")
+        } catch {
+            #expect(error.status == LF_ERR_CHANGED)
+            #expect(error.message.contains("changed on disk"))
+        }
+        #expect(box.readText(path) == theirEdit)
+
+        try doc.save(ignoreChanges: true)
+        #expect(box.readText(path) == text("before", "ours1", "ours2", "after"))
+    }
+
+    @Test("saving twice in a row works, because the first save refreshes the file's identity")
+    func savingTwice() throws {
+        let box = Sandbox()
+        let path = box.write("a.txt", simpleConflict)
+        let doc = try LFDocument(path: path)
+        try doc.resolveAll(as: .current)
+
+        try doc.save()
+        try doc.resolveAll(as: .incoming)
+        try doc.save()
+
+        #expect(box.readText(path) == text("before", "theirs1", "after"))
+    }
+
+    @Test("custom text always ends with a line terminator, using the file's style")
+    func customTextGetsTerminator() throws {
+        let box = Sandbox()
+        let lf = box.write("lf.txt", simpleConflict)
+        let crlfSource = text("a", "<<<<<<< H", "x", "=======", "y", ">>>>>>> b", "z", eol: "\r\n")
+        let crlf = box.write("crlf.txt", crlfSource)
+
+        let lfDoc = try LFDocument(path: lf)
+        try lfDoc.setCustom(0, bytes: Array("no newline".utf8))
+        try lfDoc.save()
+        let crlfDoc = try LFDocument(path: crlf)
+        try crlfDoc.setCustom(0, bytes: Array("no newline".utf8))
+        try crlfDoc.save()
+
+        #expect(box.readText(lf) == text("before", "no newline", "after"))
+        #expect(box.readText(crlf) == text("a", "no newline", "z", eol: "\r\n"))
+    }
+
+    @Test("empty custom text deletes the conflict without adding a blank line")
+    func emptyCustom() throws {
+        let box = Sandbox()
+        let path = box.write("a.txt", simpleConflict)
+        let doc = try LFDocument(path: path)
+
+        try doc.setCustom(0, bytes: [])
+        try doc.save()
+
+        #expect(box.readText(path) == text("before", "after"))
+    }
+
     @Test("saving leaves no temporary files behind")
     func noTemporaryFiles() throws {
         let box = Sandbox()
