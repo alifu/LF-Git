@@ -6,6 +6,7 @@ public enum GitClientError: Error, Equatable, Sendable, LocalizedError, CustomSt
     case nothingToCommit
     case noRemote
     case notOnBranch
+    case nothingToStash
     case unsupported(String)
 
     public var description: String {
@@ -14,6 +15,7 @@ public enum GitClientError: Error, Equatable, Sendable, LocalizedError, CustomSt
         case .nothingToCommit: "There are no staged changes to commit."
         case .noRemote: "This repository has no remote."
         case .notOnBranch: "HEAD is detached; switch to a branch first."
+        case .nothingToStash: "There are no local changes to stash."
         case .unsupported(let what): what
         }
     }
@@ -173,7 +175,7 @@ public struct GitClient: Sendable {
 
     /// Switches to a local branch, or creates a tracking branch from a remote one (`origin/feature`).
     /// Names and start points reach git as plain arguments: one that looks like an option would be run as one.
-    private func requireName(_ name: String, what: String = "branch name") throws {
+    func requireName(_ name: String, what: String = "branch name") throws {
         guard !name.isEmpty, !name.hasPrefix("-"), !name.contains("\0") else {
             throw GitClientError.unsupported("'\(name)' is not a valid \(what).")
         }
@@ -235,7 +237,7 @@ public struct GitClient: Sendable {
 
     // MARK: - Remotes
 
-    private func requireRemote() throws -> [String] {
+    func requireRemote() throws -> [String] {
         let remotes = try git.run(["remote"]).text.split(separator: "\n").map(String.init)
         guard !remotes.isEmpty else { throw GitClientError.noRemote }
         return remotes

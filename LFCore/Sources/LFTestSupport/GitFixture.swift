@@ -6,6 +6,10 @@ private let isolatedGitEnvironment: Void = {
     setenv("GIT_CONFIG_GLOBAL", "/dev/null", 1)
     setenv("GIT_CONFIG_NOSYSTEM", "1", 1)
     setenv("GIT_TERMINAL_PROMPT", "0", 1)
+    // Submodules in the tests live in local directories, which git refuses to clone by default.
+    setenv("GIT_CONFIG_COUNT", "1", 1)
+    setenv("GIT_CONFIG_KEY_0", "protocol.file.allow", 1)
+    setenv("GIT_CONFIG_VALUE_0", "always", 1)
 }()
 
 public struct ConflictSpec {

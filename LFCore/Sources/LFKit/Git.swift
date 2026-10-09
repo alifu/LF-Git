@@ -64,16 +64,18 @@ public struct Git: Sendable {
     ///     output (a diff of a million lines) never has to fit in memory.
     ///   - timeout: stop the command (`GitError.timedOut`) if it runs longer than this many seconds.
     ///   - cancellation: lets another thread stop the command (`GitError.cancelled`).
+    ///   - literalPathspecs: treat paths as plain names. A few commands (`git stash`) use magic pathspecs
+    ///     such as `:/` themselves and need this off; their callers then write `:(literal)name` explicitly.
     @discardableResult
     public func run(_ arguments: [String], stdin: Data? = nil, outputFile: URL? = nil, environment: [String: String] = [:],
                     allowedStatuses: Set<Int32> = [0], timeout: TimeInterval? = nil,
-                    cancellation: GitCancellation? = nil) throws(GitError) -> GitResult {
+                    cancellation: GitCancellation? = nil, literalPathspecs: Bool = true) throws(GitError) -> GitResult {
         let started = Date()
         var status: Int32 = -1
         defer { log?.record(arguments: arguments, status: status, duration: Date().timeIntervalSince(started)) }
         if cancellation?.isCancelled == true { throw .cancelled }
         let result = try execute(arguments, stdin: stdin, outputFile: outputFile, environment: environment,
-                                 timeout: timeout, cancellation: cancellation)
+                                 timeout: timeout, cancellation: cancellation, literalPathspecs: literalPathspecs)
         status = result.status
         guard allowedStatuses.contains(result.status) else {
             throw .failed(arguments: arguments, status: result.status, stderr: result.stderr)
@@ -82,7 +84,8 @@ public struct Git: Sendable {
     }
 
     private func execute(_ arguments: [String], stdin: Data?, outputFile: URL?, environment: [String: String],
-                         timeout: TimeInterval?, cancellation: GitCancellation?) throws(GitError) -> GitResult {
+                         timeout: TimeInterval?, cancellation: GitCancellation?,
+                         literalPathspecs: Bool) throws(GitError) -> GitResult {
         let scratch = FileManager.default.temporaryDirectory
         let errorFile = scratch.appendingPathComponent("lfgit-git-\(UUID().uuidString).err")
         // Output goes to a file, never a pipe: a pipe stays open as long as any child of git (ssh, a hook)
@@ -119,7 +122,7 @@ public struct Git: Sendable {
                 // same time fails with "index.lock exists". The app only ever needs read-only status.
                 "GIT_OPTIONAL_LOCKS": "0",
                 // Paths are file names, never patterns: a file called `*.log` must not match every log file.
-                "GIT_LITERAL_PATHSPECS": "1",
+                "GIT_LITERAL_PATHSPECS": literalPathspecs ? "1" : "0",
             ]) { _, new in new }
         if let stdin {
             let url = scratch.appendingPathComponent("lfgit-git-\(UUID().uuidString).in")
