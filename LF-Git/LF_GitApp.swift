@@ -1,3 +1,4 @@
+import LFKit
 import SwiftUI
 
 @main
@@ -11,6 +12,7 @@ struct LF_GitApp: App {
                 .tint(.theme(.accent))
                 .syncsAppearance()
                 .onAppear {
+                    GitDiffFile.sweepStaleTemporaryFiles()
                     delegate.app = app
                     app.applyLaunchArgumentsOnce(CommandLine.arguments)
                 }

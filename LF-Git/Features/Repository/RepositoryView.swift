@@ -1,35 +1,95 @@
+import LFKit
 import SwiftUI
 
-/// Sidebar of conflicted files next to the selected file.
+/// Sections in the sidebar, and what each shows next to it.
 struct RepositoryView: View {
-    let repository: RepositoryModel
+    @Bindable var repository: RepositoryModel
     let app: AppModel
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(repository: repository)
-                .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 420)
+            VStack(spacing: 0) {
+                sectionPicker
+                Divider()
+                sidebar
+            }
+            .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 460)
         } detail: {
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    OperationBanner(repository: repository, app: app)
+                }
+        }
+        .navigationTitle(repository.name)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                BranchMenu(repository: repository, app: app)
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                RemoteButtons(repository: repository, app: app)
+                Button {
+                    Task { await repository.refresh(reloadDiffs: true) }
+                } label: {
+                    Label("Reload", systemImage: "arrow.clockwise")
+                }
+                .help("Reload (⌘R)")
+            }
+        }
+        .focusedSceneValue(\.repositoryModel, repository)
+    }
+
+    private var sectionPicker: some View {
+        Picker("Section", selection: $repository.section) {
+            Text(label("Changes", repository.status.entries.filter { $0.kind != .unmerged }.count)).tag(RepositorySection.changes)
+            Text("History").tag(RepositorySection.history)
+            Text(label("Conflicts", repository.files.count)).tag(RepositorySection.conflicts)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .padding(10)
+        .accessibilityIdentifier("section-picker")
+    }
+
+    private func label(_ title: String, _ count: Int) -> String {
+        count > 0 ? "\(title) \(count)" : title
+    }
+
+    @ViewBuilder
+    private var sidebar: some View {
+        switch repository.section {
+        case .changes: ChangesSidebar(repository: repository, app: app)
+        case .history: HistorySidebar(repository: repository)
+        case .conflicts: ConflictsSidebar(repository: repository)
+        }
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch repository.section {
+        case .changes:
+            ChangesDetailView(repository: repository, app: app)
+        case .history:
+            HistoryDetailView(repository: repository)
+        case .conflicts:
             if let file = repository.selectedFile {
                 FileDetailView(repository: repository, file: file, app: app)
                     .id(file.id)
             } else {
                 ContentUnavailableView(
-                    repository.files.isEmpty ? "No conflicts left" : "Select a file",
+                    repository.files.isEmpty ? "No conflicts" : "Select a file",
                     systemImage: repository.files.isEmpty ? "checkmark.seal" : "doc.text",
                     description: Text(repository.files.isEmpty
-                        ? "Every conflicted file in \(repository.name) is resolved. Commit when you are ready."
+                        ? "Every conflicted file in \(repository.name) is resolved."
                         : "Choose a conflicted file in the sidebar.")
                 )
                 .background(.theme(.background))
             }
         }
-        .navigationTitle(repository.name)
-        .focusedSceneValue(\.repositoryModel, repository)
     }
 }
 
-struct SidebarView: View {
+struct ConflictsSidebar: View {
     @Bindable var repository: RepositoryModel
 
     var body: some View {
@@ -46,16 +106,6 @@ struct SidebarView: View {
         .overlay {
             if repository.isLoading && repository.files.isEmpty {
                 ProgressView()
-            }
-        }
-        .toolbar {
-            ToolbarItem {
-                Button {
-                    Task { await repository.refresh() }
-                } label: {
-                    Label("Reload", systemImage: "arrow.clockwise")
-                }
-                .help("Reload conflicted files (⌘R)")
             }
         }
         .accessibilityIdentifier("conflicted-files")

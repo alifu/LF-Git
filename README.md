@@ -2,7 +2,7 @@
 
 A native macOS merge tool and Git client for resolving conflicts in **files of any size**, from a Swift source file to an Xcode `project.pbxproj` with millions of lines.
 
-> **Status:** early development. The C engine, the `lfgit` command line tool, the semantic `.pbxproj` merge and the macOS app work (phases 1–4); Git client features and Homebrew packaging are next.
+> **Status:** early development. The C engine, the `lfgit` command line tool, the semantic `.pbxproj` merge and the macOS app, including a Git client, work (phases 1–5); Homebrew packaging is next.
 
 ## Goals
 
@@ -37,6 +37,22 @@ xcodebuild -project LF-Git.xcodeproj -scheme LF-Git build
 
 ## The app
 
+The window has three sections: **Changes**, **History** and **Conflicts**.
+
+**Changes** lists staged and unstaged files. Select one to see its diff with old/new line numbers; stage or
+unstage the whole file, or just **one hunk** (Stage Hunk / Unstage Hunk on the `@@` row). Write a message and
+**Commit**, or tick *Amend last commit*. Discarding an edit asks first.
+
+**History** shows the commit log with a branch graph, paged as you scroll, for the current branch or all
+branches. Select a commit to see its files and the diff of each.
+
+**Toolbar:** a branch menu (switch, create, delete, remote branches become tracking branches), **Fetch**, **Pull**
+(fast-forward only, merge or rebase) and **Push** with ahead/behind counts. A merge, rebase, cherry-pick or revert
+that stops on conflicts shows a banner with **Continue**, **Skip** and **Abort**: resolve the files in
+Conflicts, save, and press Continue, without a terminal.
+
+Everything runs through your own `git`, so your credentials, hooks and signing work as in a terminal.
+
 `lfgit open` (in a repository) or **File › Open Repository…** shows every conflicted file; pick one
 and resolve it the way VS Code does, but on files of any size.
 
@@ -55,7 +71,9 @@ and resolve it the way VS Code does, but on files of any size.
 | ⇧⌘1 / ⇧⌘2 | Accept all current / all incoming |
 | ⌘Z / ⇧⌘Z | Undo / redo a resolution |
 | ⌘S | Save (and stage when fully resolved) |
-| ⌘R | Reload the conflicted files |
+| ⌘R | Reload (also reloads the diff on screen) |
+| ⌥⌘F / ⌥⌘L / ⌥⌘P | Fetch / pull / push |
+| ⌘↩ | Commit |
 
 A 2,000,000-line file with 1,000 conflicts opens in about 2.6 s from launch; rows are read from the
 engine only when they scroll into view.

@@ -26,6 +26,14 @@ struct AppCommands: Commands {
                 .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(editor?.canRedo != true)
         }
+        CommandMenu("Repository") {
+            Button("Fetch") { run { try await $0.fetch() } }
+                .keyboardShortcut("f", modifiers: [.command, .option])
+            Button("Pull") { run { try await $0.pull() } }
+                .keyboardShortcut("l", modifiers: [.command, .option])
+            Button("Push") { run { try await $0.push() } }
+                .keyboardShortcut("p", modifiers: [.command, .option])
+        }
         CommandMenu("Conflict") {
             Button("Next Conflict") { editor?.focusNext() }
                 .keyboardShortcut(.downArrow, modifiers: [.command, .option])
@@ -43,9 +51,16 @@ struct AppCommands: Commands {
             Button("Accept All Incoming") { editor?.resolveAll(as: .incoming) }
                 .keyboardShortcut("2", modifiers: [.command, .shift])
             Divider()
-            Button("Reload Conflicted Files") { Task { await repository?.refresh() } }
+            Button("Reload") { Task { await repository?.refresh(reloadDiffs: true) } }
                 .keyboardShortcut("r")
                 .disabled(repository == nil)
+        }
+    }
+
+    private func run(_ work: @escaping (RepositoryModel) async throws -> Void) {
+        guard let repository, !repository.isBusy, repository.operation == nil else { return }
+        Task {
+            do { try await work(repository) } catch { app.errorMessage = "\(error)" }
         }
     }
 

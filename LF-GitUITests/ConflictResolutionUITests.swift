@@ -239,7 +239,7 @@ final class ConflictResolutionUITests: XCTestCase {
         process.arguments = arguments
         process.currentDirectoryURL = repository
         process.environment = ProcessInfo.processInfo.environment.merging(
-            ["GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"]) { _, new in new }
+            ["GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1", "GIT_OPTIONAL_LOCKS": "0"]) { _, new in new }
         let output = Pipe()
         process.standardOutput = output
         let errors = Pipe()

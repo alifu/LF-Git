@@ -37,12 +37,13 @@ public struct CommitFileChange: Sendable, Equatable, Identifiable {
 
 extension GitClient {
     private static let fieldSeparator = "\u{1F}"
-    private static let recordSeparator = "\u{1E}"
 
     /// Commits of the current branch, newest first; `allBranches` includes every ref.
     public func log(maxCount: Int? = nil, skip: Int = 0, allBranches: Bool = false) throws -> [GitCommit] {
-        let format = ["%H", "%P", "%an", "%ae", "%at", "%D", "%s"].joined(separator: "%x1f") + "%x1e"
-        var arguments = ["log", "--decorate=short", "--format=\(format)"]
+        // -z ends every record with NUL, which a commit subject cannot contain. --topo-order lists every
+        // commit before its parents, which the graph layout relies on (dates alone can be skewed).
+        let format = ["%H", "%P", "%an", "%ae", "%at", "%D", "%s"].joined(separator: "%x1f")
+        var arguments = ["log", "-z", "--topo-order", "--decorate=short", "--format=\(format)"]
         if let maxCount { arguments.append("--max-count=\(maxCount)") }
         if skip > 0 { arguments.append("--skip=\(skip)") }
         if allBranches { arguments.append("--all") }
@@ -51,21 +52,21 @@ extension GitClient {
             if result.stderr.contains("does not have any commits") { return [] }
             throw GitError.failed(arguments: arguments, status: 128, stderr: result.stderr)
         }
-        return String(decoding: result.stdout, as: UTF8.self)
-            .components(separatedBy: Self.recordSeparator)
-            .compactMap(Self.commit(fromRecord:))
+        return result.stdout.split(separator: 0, omittingEmptySubsequences: true)
+            .compactMap { Self.commit(fromRecord: String(decoding: $0, as: UTF8.self)) }
     }
 
     private static func commit(fromRecord record: String) -> GitCommit? {
-        let trimmed = record.drop { $0 == "\n" }
-        let fields = trimmed.components(separatedBy: fieldSeparator)
-        guard fields.count == 7, !fields[0].isEmpty else { return nil }
+        let fields = record.components(separatedBy: fieldSeparator)
+        guard fields.count >= 7, !fields[0].isEmpty else { return nil }
+        // The subject is last; if it contains the field separator itself, put it back together.
+        let subject = fields[6...].joined(separator: fieldSeparator)
         let refs = fields[5].split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
             .map { $0.hasPrefix("HEAD -> ") ? String($0.dropFirst("HEAD -> ".count)) : $0 }
         return GitCommit(
             hash: fields[0], parents: fields[1].split(separator: " ").map(String.init), authorName: fields[2],
             authorEmail: fields[3], date: Date(timeIntervalSince1970: TimeInterval(fields[4]) ?? 0), refs: refs,
-            subject: fields[6]
+            subject: subject
         )
     }
 

@@ -79,6 +79,8 @@ public struct GitClient: Sendable {
 
     /// Never let git open an editor: the app supplies messages itself.
     private static let noEditor = ["-c", "core.editor=true"]
+    /// $GIT_EDITOR and $GIT_SEQUENCE_EDITOR would win over `core.editor`.
+    private static let noEditorEnvironment = ["GIT_EDITOR": "true", "GIT_SEQUENCE_EDITOR": "true"]
 
     public init(directory: URL) {
         git = Git(directory: directory)
@@ -103,7 +105,8 @@ public struct GitClient: Sendable {
         if try hasCommits() {
             try git.run(["restore", "--staged", "--"] + paths)
         } else {
-            try git.run(["rm", "--cached", "-r", "-q", "--"] + paths)
+            // -f: a file edited after it was added differs from both the index and HEAD, which plain rm refuses.
+            try git.run(["rm", "--cached", "-r", "-q", "-f", "--"] + paths)
         }
     }
 
@@ -166,7 +169,15 @@ public struct GitClient: Sendable {
     }
 
     /// Switches to a local branch, or creates a tracking branch from a remote one (`origin/feature`).
+    /// Names and start points reach git as plain arguments: one that looks like an option would be run as one.
+    private func requireName(_ name: String, what: String = "branch name") throws {
+        guard !name.isEmpty, !name.hasPrefix("-"), !name.contains("\0") else {
+            throw GitClientError.unsupported("'\(name)' is not a valid \(what).")
+        }
+    }
+
     public func switchBranch(_ name: String) throws {
+        try requireName(name)
         let isLocal = try git.run(["show-ref", "--verify", "--quiet", "refs/heads/\(name)"], allowedStatuses: [0, 1]).status == 0
         let isRemote = try git.run(["show-ref", "--verify", "--quiet", "refs/remotes/\(name)"], allowedStatuses: [0, 1]).status == 0
         if !isLocal && isRemote {
@@ -177,11 +188,14 @@ public struct GitClient: Sendable {
     }
 
     public func createBranch(_ name: String, from startPoint: String? = nil) throws {
+        try requireName(name)
+        if let startPoint { try requireName(startPoint, what: "start point") }
         try git.run(["switch", "-c", name] + (startPoint.map { [$0] } ?? []))
     }
 
     public func deleteBranch(_ name: String, force: Bool = false) throws {
-        try git.run(["branch", force ? "-D" : "-d", name])
+        try requireName(name)
+        try git.run(["branch", force ? "-D" : "-d", "--", name])
     }
 
     // MARK: - Operations in progress
@@ -201,7 +215,7 @@ public struct GitClient: Sendable {
     }
 
     public func continueOperation(_ operation: GitOperation) throws {
-        try git.run(Self.noEditor + [operation.command, "--continue"])
+        try git.run(Self.noEditor + [operation.command, "--continue"], environment: Self.noEditorEnvironment)
     }
 
     public func abort(_ operation: GitOperation) throws {
@@ -213,7 +227,7 @@ public struct GitClient: Sendable {
         guard operation == .rebase || operation == .cherryPick else {
             throw GitClientError.unsupported("\(operation.title) cannot be skipped; abort it instead.")
         }
-        try git.run(Self.noEditor + [operation.command, "--skip"])
+        try git.run(Self.noEditor + [operation.command, "--skip"], environment: Self.noEditorEnvironment)
     }
 
     // MARK: - Remotes

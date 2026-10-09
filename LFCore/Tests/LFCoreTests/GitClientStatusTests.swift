@@ -266,6 +266,22 @@ struct GitDiffTests {
         #expect(index.hunks[1].lineCount == 4)
     }
 
+    @Test("old and new line numbers are tracked for every line of a hunk")
+    func lineNumbers() {
+        let text = "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1,3 +1,4 @@\n a\n+b\n c\n d\n@@ -10 +11 @@\n-x\n+y\n"
+        let index = Array(text.utf8).withUnsafeBytes { DiffParser.parse($0) }
+
+        #expect(index.numbers(ofLine: 1) == (old: 0, new: 0)) // file header
+        #expect(index.numbers(ofLine: 4) == (old: 0, new: 0)) // hunk header
+        #expect(index.numbers(ofLine: 5) == (old: 1, new: 1)) // " a"
+        #expect(index.numbers(ofLine: 6) == (old: 0, new: 2)) // "+b"
+        #expect(index.numbers(ofLine: 7) == (old: 2, new: 3)) // " c"
+        #expect(index.numbers(ofLine: 8) == (old: 3, new: 4)) // " d"
+        #expect(index.numbers(ofLine: 10) == (old: 10, new: 0)) // "-x"
+        #expect(index.numbers(ofLine: 11) == (old: 0, new: 11)) // "+y"
+        #expect(index.numbers(ofLine: 99) == (old: 0, new: 0)) // outside the diff
+    }
+
     @Test("binary diffs are flagged and have no hunks")
     func binary() {
         let text = "diff --git a/x b/x\nindex 1..2 100644\nBinary files a/x and b/x differ\n"
@@ -362,6 +378,16 @@ struct GitDiffTests {
         }
 
         #expect(!FileManager.default.fileExists(atPath: try #require(url).path))
+    }
+
+    @Test("git never takes optional locks, so a background status cannot make a stage fail")
+    func noOptionalLocks() throws {
+        let fixture = try GitFixture()
+
+        let environment = try fixture.git.run(["-c", "alias.showenv=!env", "showenv"]).text
+
+        #expect(environment.contains("GIT_OPTIONAL_LOCKS=0"))
+        #expect(environment.contains("GIT_TERMINAL_PROMPT=0"))
     }
 
     @Test("Git.run can feed stdin and write stdout to a file")

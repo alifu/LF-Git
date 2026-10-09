@@ -46,10 +46,11 @@ public struct Git: Sendable {
     /// Runs `git` and waits for it.
     /// - Parameters:
     ///   - stdin: bytes fed to git's standard input (through a temporary file, so large input cannot deadlock).
+    ///   - environment: extra variables for this call (the app's own settings below always apply).
     ///   - outputFile: when set, standard output goes to this file instead of `GitResult.stdout`, so huge
     ///     output (a diff of a million lines) never has to fit in memory.
     @discardableResult
-    public func run(_ arguments: [String], stdin: Data? = nil, outputFile: URL? = nil,
+    public func run(_ arguments: [String], stdin: Data? = nil, outputFile: URL? = nil, environment: [String: String] = [:],
                     allowedStatuses: Set<Int32> = [0]) throws(GitError) -> GitResult {
         let scratch = FileManager.default.temporaryDirectory
         let errorFile = scratch.appendingPathComponent("lfgit-git-\(UUID().uuidString).err")
@@ -67,7 +68,16 @@ public struct Git: Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git"] + arguments
         process.currentDirectoryURL = directory
-        process.environment = ProcessInfo.processInfo.environment.merging(["GIT_TERMINAL_PROMPT": "0"]) { _, new in new }
+        process.environment = ProcessInfo.processInfo.environment
+            .merging(environment) { _, new in new }
+            .merging([
+                "GIT_TERMINAL_PROMPT": "0",
+                // `git status` would otherwise refresh the index under a lock, and a stage that runs at the
+                // same time fails with "index.lock exists". The app only ever needs read-only status.
+                "GIT_OPTIONAL_LOCKS": "0",
+                // Paths are file names, never patterns: a file called `*.log` must not match every log file.
+                "GIT_LITERAL_PATHSPECS": "1",
+            ]) { _, new in new }
         var inputHandle: FileHandle?
         if let stdin {
             let url = scratch.appendingPathComponent("lfgit-git-\(UUID().uuidString).in")
@@ -85,6 +95,7 @@ public struct Git: Sendable {
             guard FileManager.default.createFile(atPath: outputFile.path, contents: nil),
                   let handle = try? FileHandle(forWritingTo: outputFile) else {
                 try? errorHandle.close()
+                try? inputHandle?.close()
                 throw .launchFailed("cannot write \(outputFile.path)")
             }
             outputHandle = handle

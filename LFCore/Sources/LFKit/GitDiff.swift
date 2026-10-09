@@ -27,6 +27,28 @@ public struct DiffIndex: Sendable, Equatable {
     public let fileHeaderByteCount: Int
     public let hunks: [DiffHunk]
     public let isBinary: Bool
+    /// Line number in the old / new file of every diff line (0 = none). Tracked up to `maxNumberedLines`.
+    private let oldNumbers: [Int32]
+    private let newNumbers: [Int32]
+
+    static let maxNumberedLines = 4_000_000
+
+    init(lineCount: Int, fileHeaderLineCount: Int, fileHeaderByteCount: Int, hunks: [DiffHunk], isBinary: Bool,
+         oldNumbers: [Int32] = [], newNumbers: [Int32] = []) {
+        self.lineCount = lineCount
+        self.fileHeaderLineCount = fileHeaderLineCount
+        self.fileHeaderByteCount = fileHeaderByteCount
+        self.hunks = hunks
+        self.isBinary = isBinary
+        self.oldNumbers = oldNumbers
+        self.newNumbers = newNumbers
+    }
+
+    /// The old- and new-file line numbers of a 1-based diff line; 0 when the line has none on that side.
+    public func numbers(ofLine line: Int) -> (old: Int, new: Int) {
+        guard line >= 1, line <= oldNumbers.count else { return (0, 0) }
+        return (Int(oldNumbers[line - 1]), Int(newNumbers[line - 1]))
+    }
 }
 
 public enum DiffParser {
@@ -43,6 +65,11 @@ public enum DiffParser {
         var isBinary = false
         var lineNumber = 0
         var offset = 0
+        let tracksNumbers = count < DiffIndex.maxNumberedLines * 8 // a rough bound before the exact line count is known
+        var oldNumbers: [Int32] = []
+        var newNumbers: [Int32] = []
+        var oldCounter = 0
+        var newCounter = 0
 
         func close(atByte byte: Int, line: Int) {
             guard let open else { return }
@@ -59,12 +86,26 @@ public enum DiffParser {
             let next = newline == nil ? count : lineEnd + 1
             lineNumber += 1
             let line = UnsafeRawBufferPointer(start: base + offset, count: lineEnd - offset)
+            var old = 0, new = 0
             if line.starts(with: hunkMarker) {
                 close(atByte: offset, line: lineNumber)
                 let text = String(decoding: line, as: UTF8.self)
-                open = (lineNumber, offset, headerNumbers(text), text)
-            } else if open == nil, binaryMarkers.contains(where: { line.starts(with: $0) }) {
-                isBinary = true
+                let fields = headerNumbers(text)
+                open = (lineNumber, offset, fields, text)
+                (oldCounter, newCounter) = (fields.0, fields.2)
+            } else if open == nil {
+                if binaryMarkers.contains(where: { line.starts(with: $0) }) { isBinary = true }
+            } else if let first = line.first {
+                switch first {
+                case 0x20: (old, new) = (oldCounter, newCounter); oldCounter += 1; newCounter += 1 // context
+                case 0x2D: old = oldCounter; oldCounter += 1 // removed
+                case 0x2B: new = newCounter; newCounter += 1 // added
+                default: break // "\ No newline at end of file"
+                }
+            }
+            if tracksNumbers && lineNumber <= DiffIndex.maxNumberedLines {
+                oldNumbers.append(Int32(truncatingIfNeeded: old))
+                newNumbers.append(Int32(truncatingIfNeeded: new))
             }
             offset = next
         }
@@ -75,7 +116,9 @@ public enum DiffParser {
             fileHeaderLineCount: firstHunk.map { $0.headerLine - 1 } ?? lineNumber,
             fileHeaderByteCount: firstHunk?.byteStart ?? count,
             hunks: hunks,
-            isBinary: isBinary
+            isBinary: isBinary,
+            oldNumbers: oldNumbers,
+            newNumbers: newNumbers
         )
     }
 
@@ -121,7 +164,26 @@ public final class GitDiffFile: @unchecked Sendable {
         try? FileManager.default.removeItem(at: fileURL)
     }
 
+    /// Removes diff files left behind by a crash or a force quit. Call once at launch.
+    public static func sweepStaleTemporaryFiles(olderThan age: TimeInterval = 86_400) {
+        let directory = FileManager.default.temporaryDirectory
+        let cutoff = Date(timeIntervalSinceNow: -age)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        for name in names where name.hasPrefix("lfgit-diff-") && name.hasSuffix(".diff") {
+            let url = directory.appendingPathComponent(name)
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let modified, modified < cutoff {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
     public var isDisplayable: Bool { document != nil }
+
+    /// Old- and new-file line numbers of a diff line (0 = none).
+    public func numbers(ofLine line: Int) -> (old: Int, new: Int) {
+        index.numbers(ofLine: line)
+    }
     public var lineCount: Int { document?.info.lineCount ?? 0 }
 
     /// A 1-based line without its terminator.
@@ -163,7 +225,8 @@ extension GitClient {
     public func diff(of target: DiffTarget) throws -> GitDiffFile {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("lfgit-diff-\(UUID().uuidString).diff")
         // Fixed prefixes: `git apply` expects a/ and b/ whatever diff.noprefix says.
-        let common = ["diff", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"]
+        // --no-textconv: a hunk is applied as a patch, so it has to be the file's real text.
+        let common = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/"]
         var allowed: Set<Int32> = [0]
         var arguments: [String]
         switch target {

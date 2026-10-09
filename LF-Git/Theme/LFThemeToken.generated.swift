@@ -48,6 +48,12 @@ enum LFThemeToken: String, CaseIterable, Sendable {
     case minimapIncoming = "lfMinimapIncoming"
     /// Minimap tick: unresolved
     case minimapUnresolved = "lfMinimapUnresolved"
+    /// Diff: added lines
+    case diffAddedBody = "lfDiffAddedBody"
+    /// Diff: removed lines
+    case diffRemovedBody = "lfDiffRemovedBody"
+    /// Diff: @@ hunk header row
+    case diffHunkHeader = "lfDiffHunkHeader"
     /// Syntax: keywords
     case syntaxKeyword = "lfSyntaxKeyword"
     /// Syntax: strings
