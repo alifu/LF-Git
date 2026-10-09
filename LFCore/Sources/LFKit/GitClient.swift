@@ -80,9 +80,9 @@ public struct GitClient: Sendable {
     public let git: Git
 
     /// Never let git open an editor: the app supplies messages itself.
-    private static let noEditor = ["-c", "core.editor=true"]
+    static let noEditor = ["-c", "core.editor=true"]
     /// $GIT_EDITOR and $GIT_SEQUENCE_EDITOR would win over `core.editor`.
-    private static let noEditorEnvironment = ["GIT_EDITOR": "true", "GIT_SEQUENCE_EDITOR": "true"]
+    static let noEditorEnvironment = ["GIT_EDITOR": "true", "GIT_SEQUENCE_EDITOR": "true"]
 
     /// How long a fetch, pull or push may run before it is stopped.
     public static let defaultRemoteTimeout: TimeInterval = 300
@@ -135,7 +135,7 @@ public struct GitClient: Sendable {
 
     /// Commits the staged changes (or amends the last commit) and returns the new short hash.
     @discardableResult
-    public func commit(message: String, amend: Bool = false) throws -> String {
+    public func commit(message: String, amend: Bool = false, noVerify: Bool = false) throws -> String {
         guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw GitClientError.emptyMessage
         }
@@ -144,8 +144,15 @@ public struct GitClient: Sendable {
         }
         var arguments = ["commit", "-q", "--cleanup=whitespace", "-F", "-"]
         if amend { arguments.append("--amend") }
+        if noVerify { arguments.append("--no-verify") }
         try git.run(arguments, stdin: Data(message.utf8))
         return try git.run(["rev-parse", "--short", "HEAD"]).text
+    }
+
+    /// Adds the staged changes to the last commit and keeps its message.
+    public func amendKeepingMessage(noVerify: Bool = false) throws {
+        try git.run(Self.noEditor + ["commit", "-q", "--amend", "--no-edit"] + (noVerify ? ["--no-verify"] : []),
+                    environment: Self.noEditorEnvironment)
     }
 
     /// The full message of HEAD, for amending; nil before the first commit.
@@ -181,8 +188,12 @@ public struct GitClient: Sendable {
         }
     }
 
-    public func switchBranch(_ name: String) throws {
+    public func switchBranch(_ name: String, discardChanges: Bool = false) throws {
         try requireName(name)
+        if discardChanges {
+            try git.run(["switch", "--discard-changes", name])
+            return
+        }
         let isLocal = try git.run(["show-ref", "--verify", "--quiet", "refs/heads/\(name)"], allowedStatuses: [0, 1]).status == 0
         let isRemote = try git.run(["show-ref", "--verify", "--quiet", "refs/remotes/\(name)"], allowedStatuses: [0, 1]).status == 0
         if !isLocal && isRemote {
@@ -255,14 +266,17 @@ public struct GitClient: Sendable {
     }
 
     /// Pushes the current branch; a branch without an upstream is published with `-u`.
-    public func push(timeout: TimeInterval? = defaultRemoteTimeout, cancellation: GitCancellation? = nil) throws {
+    /// `force` uses `--force-with-lease`: it overwrites the remote branch only if nobody else pushed to it meanwhile.
+    public func push(force: Bool = false, timeout: TimeInterval? = defaultRemoteTimeout,
+                     cancellation: GitCancellation? = nil) throws {
         let remotes = try requireRemote()
         let status = try status()
         guard let branch = status.branch else { throw GitClientError.notOnBranch }
+        let flags = force ? ["--force-with-lease"] : []
         if status.upstream != nil {
-            try git.run(["push", "-q"], timeout: timeout, cancellation: cancellation)
+            try git.run(["push", "-q"] + flags, timeout: timeout, cancellation: cancellation)
         } else {
-            try git.run(["push", "-q", "-u", remotes.contains("origin") ? "origin" : remotes[0], branch],
+            try git.run(["push", "-q", "-u"] + flags + [remotes.contains("origin") ? "origin" : remotes[0], branch],
                         timeout: timeout, cancellation: cancellation)
         }
     }
