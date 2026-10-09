@@ -56,10 +56,22 @@ extension GitClient {
         guard changes > 0 else { throw GitClientError.unsupported("Select at least one added or removed line.") }
 
         let start = reverse ? hunk.newStart : hunk.oldStart
-        var patch = try diff.fileHeader()
+        var patch = try plainHeader(of: diff)
         patch.append(Data("@@ -\(start),\(oldCount) +\(start),\(newCount) @@\n".utf8))
         for line in body { patch.append(line); patch.append(0x0A) }
         return patch
+    }
+
+    /// The file header; for an added or deleted file a plain modification header, because a partial patch no longer
+    /// creates or removes the file.
+    private func plainHeader(of diff: GitDiffFile) throws -> Data {
+        let header = try diff.fileHeader()
+        let text = String(decoding: header, as: UTF8.self)
+        guard text.contains("--- /dev/null") || text.contains("+++ /dev/null"),
+              let first = text.split(separator: "\n").first, first.hasPrefix("diff --git a/"),
+              let split = first.range(of: " b/", options: .backwards) else { return header }
+        let path = String(first[first.index(first.startIndex, offsetBy: "diff --git a/".count)..<split.lowerBound])
+        return Data("diff --git a/\(path) b/\(path)\n--- a/\(path)\n+++ b/\(path)\n".utf8)
     }
 
     // MARK: - Index and work tree

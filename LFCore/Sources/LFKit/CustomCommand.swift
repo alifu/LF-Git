@@ -84,9 +84,10 @@ extension GitClient {
         process.waitUntilExit()
         timer?.cancel()
         if let key { cancellation?.remove(key) }
-        let status = stopper.reason == nil ? process.terminationStatus : -1
+        let stopped = stopper.reason != nil && (process.terminationReason == .uncaughtSignal || process.terminationStatus != 0)
+        let status = stopped ? -1 : process.terminationStatus
         git.log?.record(command: custom.command, status: status, duration: Date().timeIntervalSince(started))
-        if let reason = stopper.reason { throw reason }
+        if stopped, let reason = stopper.reason { throw reason }
 
         let data = (try? Data(contentsOf: output)) ?? Data()
         let tail = data.suffix(Self.maxOutputBytes)

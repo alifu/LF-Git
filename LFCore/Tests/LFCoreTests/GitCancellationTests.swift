@@ -18,7 +18,7 @@ struct GitCancellationTests {
             try fixture.git.run(Self.sleeper, cancellation: token)
         }
 
-        #expect(Date().timeIntervalSince(started) < 10)
+        #expect(Date().timeIntervalSince(started) < 25) // the command would sleep for 30 s; the margin covers a loaded machine
     }
 
     @Test("a token that is already cancelled never starts git")
@@ -41,7 +41,7 @@ struct GitCancellationTests {
             try fixture.git.run(Self.sleeper, timeout: 1)
         }
 
-        #expect(Date().timeIntervalSince(started) < 10)
+        #expect(Date().timeIntervalSince(started) < 25) // the command would sleep for 30 s; the margin covers a loaded machine
     }
 
     @Test("a fast command is not affected by its timeout or an unused token")

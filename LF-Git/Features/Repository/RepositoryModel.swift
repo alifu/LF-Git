@@ -64,6 +64,13 @@ struct PendingPrompt: Identifiable {
     let action: (String) -> Void
 }
 
+/// What a stopped merge/rebase looks like, to tell "this call hit conflicts" from "this call failed".
+nonisolated struct ConflictState: Equatable, Sendable {
+    let operation: GitOperation?
+    let files: [String]
+    let head: String?
+}
+
 /// A multi-line message to write (a commit message, a stash name…).
 struct PendingMessageEdit: Identifiable {
     let id = UUID()
@@ -203,6 +210,7 @@ final class RepositoryModel {
     }
 
     func stopWatching() {
+        watcher?.stop()
         watcher = nil
     }
 
@@ -281,6 +289,7 @@ final class RepositoryModel {
             activeCancellation = nil
         }
         let client = client
+        let before = ConflictState(operation: operation, files: files.map(\.id), head: status.commitHash)
         do {
             if serialized {
                 try await writeQueue.run { try work(client, token) }
@@ -290,7 +299,9 @@ final class RepositoryModel {
         } catch {
             await refresh()
             // A merge, rebase or cherry-pick that stops on conflicts is not a failure: the banner takes over.
-            if operation != nil, !files.isEmpty, error is GitError, (error as? GitError) != .cancelled { return }
+            // Only when this very call moved things: a failure while an old conflict was already waiting is real.
+            let after = ConflictState(operation: operation, files: files.map(\.id), head: status.commitHash)
+            if after.operation != nil, !files.isEmpty, after != before, error is GitError, (error as? GitError) != .cancelled { return }
             throw error
         }
         await refresh()

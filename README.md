@@ -37,21 +37,40 @@ xcodebuild -project LF-Git.xcodeproj -scheme LF-Git build
 
 ## The app
 
-The window has three sections: **Changes**, **History** and **Conflicts**.
+The window has ten sections, reachable from the grid at the top of the sidebar, with **⌃1 … ⌃0**, or from the
+command palette (**⌘K**): **Changes · Branches · History · Stash · Tags · Remotes · Reflog · Worktrees ·
+Submodules · Conflicts**. Everything runs through your own `git`, so credentials, hooks and signing work as in a
+terminal, and every command is listed in the **command log** (⇧⌘L).
 
-**Changes** lists staged and unstaged files. Select one to see its diff with old/new line numbers; stage or
-unstage the whole file, or just **one hunk** (Stage Hunk / Unstage Hunk on the `@@` row). Write a message and
-**Commit**, or tick *Amend last commit*. Discarding an edit asks first.
+| Section | What you can do |
+|---|---|
+| **Changes** | Stage/unstage files, **hunks** or **single lines** (select lines in the diff), discard (lines too), commit, amend, skip hooks, ignore a file (`.gitignore` or local exclude), stash one file, file history. Diff options: ignore whitespace, context size, rename detection |
+| **Branches** | Checkout, new, rename, delete (local and on the remote), merge (default / no-ff / ff-only / squash), rebase onto, reset (soft/mixed/hard), fast-forward from upstream, set/unset upstream, compare with the current branch |
+| **History** | Graph, filter by message/author/file, **reword, edit, squash, fixup, drop, move up/down**, amend an older commit with staged changes, fixup commits and autosquash, revert, **cherry-pick** (copy commits, paste on another branch), reset, detached checkout, branch/tag from a commit, **bisect**, compare any two commits, **blame**, file history. Select lines of a commit's diff to apply them, revert them, or cut them out of the commit |
+| **Stash** | Stash all / with untracked / staged only / keep index, apply, pop, drop, rename, branch from stash, browse its diff |
+| **Tags** | Lightweight and annotated tags, push, delete (local and remote), checkout, branch from tag |
+| **Remotes** | Add, rename, change URL, remove, fetch, prune, browse remote branches |
+| **Reflog** | Browse, checkout, reset, cherry-pick, branch; **Undo** the last HEAD move (the same button redoes it) |
+| **Worktrees / Submodules** | Add, remove, open; add, update, remove submodules |
 
-**History** shows the commit log with a branch graph, paged as you scroll, for the current branch or all
-branches. Select a commit to see its files and the diff of each.
+**Toolbar:** branch menu, **Fetch**, **Pull** (fast-forward only, merge or rebase), **Push** (and **force push with
+lease**) with ahead/behind counts. Fetch, pull, push and other network commands show a **Cancel** button and stop
+by themselves after 5 minutes; git never prompts for a password. A merge, rebase, cherry-pick or revert that stops
+on conflicts shows a banner with **Continue**, **Skip** and **Abort**: resolve the files in Conflicts, save, and
+press Continue, without a terminal.
 
-**Toolbar:** a branch menu (switch, create, delete, remote branches become tracking branches), **Fetch**, **Pull**
-(fast-forward only, merge or rebase) and **Push** with ahead/behind counts. A merge, rebase, cherry-pick or revert
-that stops on conflicts shows a banner with **Continue**, **Skip** and **Abort**: resolve the files in
-Conflicts, save, and press Continue, without a terminal.
+The window follows edits made in an editor or terminal (file-system events), and **File › Open Recent** lists the
+repositories you used.
 
-Everything runs through your own `git`, so your credentials, hooks and signing work as in a terminal.
+**Custom commands:** put your own shell commands in `~/.config/lfgit/config.json`; they appear in the command
+palette and run in the repository (`$LFGIT_REPO`, `$LFGIT_BRANCH` are set):
+
+```json
+{ "customCommands": [ { "name": "Prune merged branches", "command": "git branch --merged | grep -v '\\*' | xargs git branch -d" } ] }
+```
+
+Rewriting history works on the checked-out branch and refuses ranges that contain merge commits; your local edits
+are stashed and restored around it.
 
 `lfgit open` (in a repository) or **File › Open Repository…** shows every conflicted file; pick one
 and resolve it the way VS Code does, but on files of any size.
@@ -67,13 +86,16 @@ and resolve it the way VS Code does, but on files of any size.
 | Shortcut | Action |
 |---|---|
 | ⌥⌘↓ / ⌥⌘↑ | Next / previous conflict (unresolved first) |
-| ⌘1 / ⌘2 / ⌘3 / ⌘4 | Accept current / incoming / both / base |
+| ⌘1 / ⌘2 / ⌘3 / ⌘4 | Accept current / incoming / both / base (in Conflicts) |
 | ⇧⌘1 / ⇧⌘2 | Accept all current / all incoming |
 | ⌘Z / ⇧⌘Z | Undo / redo a resolution |
 | ⌘S | Save (and stage when fully resolved) |
 | ⌘R | Reload (also reloads the diff on screen) |
 | ⌥⌘F / ⌥⌘L / ⌥⌘P | Fetch / pull / push |
 | ⌘↩ | Commit |
+| ⌘K / ⇧⌘L / ⌘/ | Command palette / command log / shortcut list |
+| ⌃1 … ⌃0 | Go to a section |
+| ⌥⌘Z | Undo the last git move (reflog) |
 
 A 2,000,000-line file with 1,000 conflicts opens in about 2.6 s from launch; rows are read from the
 engine only when they scroll into view.

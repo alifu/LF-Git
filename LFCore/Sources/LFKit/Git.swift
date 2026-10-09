@@ -155,7 +155,7 @@ public struct Git: Sendable {
         timer?.cancel()
         if let cancelKey { cancellation?.remove(cancelKey) }
 
-        if let reason = stopper.reason { throw reason }
+        if let reason = stopper.reason, process.terminationReason == .uncaughtSignal || process.terminationStatus != 0 { throw reason }
         if process.terminationReason == .uncaughtSignal {
             throw .failed(arguments: arguments, status: process.terminationStatus, stderr: "terminated by signal \(process.terminationStatus)")
         }
@@ -235,16 +235,45 @@ final class ProcessStopper: @unchecked Sendable {
     }
 
     func stop(_ reason: GitError) {
+        // A command that already finished on its own is not "cancelled", whatever the timer says.
         let isFirst: Bool = lock.withLock {
-            guard firstReason == nil else { return false }
+            guard firstReason == nil, process.isRunning else { return false }
             firstReason = reason
             return true
         }
-        guard isFirst, process.isRunning else { return }
-        process.terminate()
+        guard isFirst else { return }
         let pid = process.processIdentifier
+        let children = Self.descendants(of: pid)
+        process.terminate()
+        // ssh, hooks and shell pipelines are children of git: stop them too, or the work goes on unseen.
+        children.forEach { kill($0, SIGTERM) }
         DispatchQueue.global().asyncAfter(deadline: .now() + gracePeriod) { [process] in
             if process.isRunning { kill(pid, SIGKILL) }
+            children.forEach { kill($0, SIGKILL) }
         }
+    }
+
+    /// Every process below `root`, found through `ps`.
+    private static func descendants(of root: pid_t) -> [pid_t] {
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+        ps.arguments = ["-A", "-o", "pid=,ppid="]
+        let pipe = Pipe()
+        ps.standardOutput = pipe
+        ps.standardError = FileHandle.nullDevice
+        guard (try? ps.run()) != nil else { return [] }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        ps.waitUntilExit()
+        var children: [pid_t: [pid_t]] = [:]
+        for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
+            let numbers = line.split(separator: " ").compactMap { pid_t($0) }
+            if numbers.count == 2 { children[numbers[1], default: []].append(numbers[0]) }
+        }
+        var found: [pid_t] = [], queue = children[root] ?? []
+        while let next = queue.popLast() {
+            found.append(next)
+            queue += children[next] ?? []
+        }
+        return found
     }
 }

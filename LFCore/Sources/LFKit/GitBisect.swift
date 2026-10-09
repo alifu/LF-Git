@@ -75,15 +75,18 @@ extension GitClient {
             target = path.hasPrefix("/") ? URL(fileURLWithPath: path) : git.directory.appendingPathComponent(path)
             try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
         }
-        var content = (try? String(contentsOf: target, encoding: .utf8)) ?? ""
+        // Append as bytes: a file that is not UTF-8 must never be read as empty and overwritten.
+        let existingData = FileManager.default.fileExists(atPath: target.path) ? try Data(contentsOf: target) : Data()
+        guard let content = String(data: existingData, encoding: .utf8) else {
+            throw GitClientError.unsupported("\(target.lastPathComponent) is not UTF-8 text; edit it by hand.")
+        }
         let existing = Set(content.split(separator: "\n").map(String.init))
+        var addition = (content.isEmpty || content.hasSuffix("\n")) ? "" : "\n"
         for path in paths {
             let pattern = "/" + Self.escapedIgnorePattern(path)
-            guard !existing.contains(pattern) else { continue }
-            if !content.isEmpty && !content.hasSuffix("\n") { content += "\n" }
-            content += pattern + "\n"
+            if !existing.contains(pattern) { addition += pattern + "\n" }
         }
-        try content.write(to: target, atomically: true, encoding: .utf8)
+        try (existingData + Data(addition.utf8)).write(to: target, options: .atomic)
 
         let tracked = try paths.filter {
             try git.run(["ls-files", "--error-unmatch", "--", $0], allowedStatuses: [0, 1]).status == 0

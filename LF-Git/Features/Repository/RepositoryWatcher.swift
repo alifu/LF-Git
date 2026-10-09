@@ -16,7 +16,12 @@ nonisolated final class RepositoryWatcher: @unchecked Sendable {
 
     init(root: URL, onChange: @escaping @Sendable () -> Void) {
         self.onChange = onChange
-        var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
+        // The stream keeps the watcher alive until it is released, so a callback can never see a half-destroyed object.
+        var context = FSEventStreamContext(
+            version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: { info in info.map { _ = Unmanaged<RepositoryWatcher>.fromOpaque($0).retain() }; return info },
+            release: { info in info.map { Unmanaged<RepositoryWatcher>.fromOpaque($0).release() } },
+            copyDescription: nil)
         let callback: FSEventStreamCallback = { _, info, count, paths, _, _ in
             guard let info else { return }
             let watcher = Unmanaged<RepositoryWatcher>.fromOpaque(info).takeUnretainedValue()
@@ -31,11 +36,15 @@ nonisolated final class RepositoryWatcher: @unchecked Sendable {
         FSEventStreamStart(stream)
     }
 
-    deinit {
+    /// Stops delivering events and waits for a callback that is already running. Call before dropping the watcher.
+    func stop() {
         guard let stream else { return }
+        self.stream = nil
         FSEventStreamStop(stream)
         FSEventStreamInvalidate(stream)
         FSEventStreamRelease(stream)
+        queue.sync {}
+        pending?.cancel()
     }
 
     private func received(_ paths: [String]) {

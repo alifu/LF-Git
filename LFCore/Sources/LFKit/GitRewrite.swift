@@ -15,12 +15,15 @@ extension GitClient {
         guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw GitClientError.emptyMessage }
         let messageFile = FileManager.default.temporaryDirectory.appendingPathComponent("lfgit-msg-\(UUID().uuidString)")
         try Data(message.utf8).write(to: messageFile)
-        defer { try? FileManager.default.removeItem(at: messageFile) }
-        let amend = "exec git commit --amend -q --cleanup=whitespace -F \(Self.shellQuoted(messageFile.path))"
+        // Kept if the rebase stops (a failing hook, a conflict later on): `rebase --continue` runs the exec again.
+        var finished = false
+        defer { if finished { try? FileManager.default.removeItem(at: messageFile) } }
+        let amend = "exec git commit --amend -q --no-verify --cleanup=whitespace -F \(Self.shellQuoted(messageFile.path))"
         try rewrite(from: commit.parents.first) { range in
             try Self.require(range.first?.hash == commit.hash, "That commit is not on the current branch.")
             return range.flatMap { ["pick \($0.hash)"] + ($0.hash == commit.hash ? [amend] : []) }
         }
+        finished = true
     }
 
     public func dropCommit(_ commit: GitCommit) throws {

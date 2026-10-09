@@ -243,7 +243,7 @@ struct GitClientLineTests {
         let wide = try client.diff(of: .workingTree(path: "f.txt", staged: false), options: DiffOptions(contextLines: 8))
         #expect(narrow.lineCount < plain.lineCount)
         #expect(wide.lineCount > plain.lineCount)
-        #expect(narrow.isStageable)
+        #expect(!narrow.isStageable, "zero context patches do not apply cleanly")
         #expect(!ignoring.isStageable)
     }
 
@@ -306,5 +306,54 @@ struct GitClientLineTests {
 
         #expect(FileManager.default.fileExists(atPath: fixture.sandbox.path("secret.txt")))
         #expect(try client.status().staged.map(\.path).contains("secret.txt"))
+    }
+}
+
+@Suite("Git client: review fixes")
+struct GitClientReviewFixTests {
+    @Test("lines of a file a commit added can be taken back one by one")
+    func partialRevertOfAddedFile() throws {
+        let fixture = try GitFixture()
+        try fixture.commit("keep.txt", "k\n")
+        try fixture.commit("new.txt", "a\nb\nc\n", message: "add")
+        let client = GitClient(directory: fixture.directory)
+        let commit = try #require(try client.log().first)
+        let diff = try client.diff(of: .commit(commit, path: "new.txt"))
+        let hunk = try #require(diff.index.hunks.first)
+        let b = Set((1...diff.lineCount).filter { diff.text(ofLine: $0) == "+b" })
+
+        try client.applyCommitLines(b, in: hunk, of: diff, to: .workingTree, reverse: true)
+
+        #expect(fixture.read("new.txt") == "a\nc\n")
+    }
+
+    @Test("ignoring refuses a .gitignore that is not UTF-8 instead of overwriting it")
+    func ignoreKeepsForeignFiles() throws {
+        let fixture = try GitFixture()
+        try fixture.commit("a.txt", "1\n")
+        fixture.sandbox.write("x.txt", "x\n")
+        fixture.sandbox.write(".gitignore", bytes: [0xFF, 0xFE, 0x61, 0x00])
+        let client = GitClient(directory: fixture.directory)
+
+        #expect(throws: GitClientError.self) { try client.ignore(["x.txt"], scope: .gitignore) }
+
+        #expect(fixture.sandbox.read(fixture.sandbox.path(".gitignore")) == [0xFF, 0xFE, 0x61, 0x00])
+    }
+
+    @Test("stopping a command also stops what it started")
+    func stopsChildren() throws {
+        let sandbox = Sandbox()
+        let marker = sandbox.path("alive")
+        let fixture = try GitFixture()
+        let token = GitCancellation()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) { token.cancel() }
+
+        #expect(throws: GitError.cancelled) {
+            try GitClient(directory: fixture.directory).run(
+                CustomCommand(name: "x", command: "(sleep 5; touch '\(marker)') & wait"), cancellation: token)
+        }
+        Thread.sleep(forTimeInterval: 6)
+
+        #expect(!FileManager.default.fileExists(atPath: marker))
     }
 }

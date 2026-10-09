@@ -202,7 +202,7 @@ public final class GitDiffFile: @unchecked Sendable {
     public var isDisplayable: Bool { document != nil }
 
     /// Hunks and lines can be staged only from a diff that matches the file byte for byte.
-    public var isStageable: Bool { !options.ignoreWhitespace }
+    public var isStageable: Bool { !options.ignoreWhitespace && options.contextLines != 0 }
 
     /// Old- and new-file line numbers of a diff line (0 = none).
     public func numbers(ofLine line: Int) -> (old: Int, new: Int) {
