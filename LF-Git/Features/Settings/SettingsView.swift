@@ -38,6 +38,7 @@ struct SettingsView: View {
                 Text("Stored in your global git configuration, so the terminal uses the same values.")
             }
             GitAccountsSection()
+            TerminalEnvironmentSection()
             Section("Appearance") {
                 Toggle("Dark mode", isOn: darkMode)
                     .disabled(appearance == .system)

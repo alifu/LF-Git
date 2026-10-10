@@ -65,7 +65,7 @@ extension GitClient {
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", custom.command]
         process.currentDirectoryURL = git.directory
-        process.environment = ProcessInfo.processInfo.environment.merging([
+        process.environment = ProcessInfo.processInfo.environment.merging(GitEnvironment.shared.current) { _, new in new }.merging([
             "LFGIT_REPO": git.directory.path, "LFGIT_BRANCH": branch ?? "", "GIT_TERMINAL_PROMPT": "0",
         ]) { _, new in new }
         process.standardInput = FileHandle.nullDevice

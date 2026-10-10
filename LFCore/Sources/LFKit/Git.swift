@@ -17,6 +17,7 @@ public enum GitError: Error, Equatable, Sendable, LocalizedError, CustomStringCo
             "cannot run git: \(reason)"
         case .failed(let arguments, let status, let stderr):
             "git \(arguments.joined(separator: " ")) failed (exit \(status))" + (stderr.isEmpty ? "" : ": \(stderr)")
+                + (Self.isLoginProblem(stderr) ? "\n\(Self.loginHint)" : "")
         case .notARepository(let path):
             "'\(path)' is not inside a git repository"
         case .unexpectedOutput(let what):
@@ -29,6 +30,15 @@ public enum GitError: Error, Equatable, Sendable, LocalizedError, CustomStringCo
     }
 
     public var errorDescription: String? { description }
+
+    private static let loginHint = "Sign in first: add an access token or password under Settings › Git server accounts, "
+        + "or use an SSH key that is loaded in your agent."
+
+    private static func isLoginProblem(_ stderr: String) -> Bool {
+        let signs = ["could not read Username", "could not read Password", "Authentication failed", "terminal prompts disabled",
+                     "Permission denied (publickey", "HTTP Basic: Access denied", "Invalid username or password"]
+        return signs.contains { stderr.localizedCaseInsensitiveContains($0) }
+    }
 }
 
 public struct GitResult: Sendable {
@@ -115,6 +125,7 @@ public struct Git: Sendable {
         process.arguments = ["git"] + arguments
         process.currentDirectoryURL = directory
         process.environment = ProcessInfo.processInfo.environment
+            .merging(GitEnvironment.shared.current) { _, new in new }
             .merging(environment) { _, new in new }
             .merging([
                 "GIT_TERMINAL_PROMPT": "0",

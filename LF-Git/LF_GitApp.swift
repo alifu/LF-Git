@@ -13,6 +13,7 @@ struct LF_GitApp: App {
                 .syncsAppearance()
                 .onAppear {
                     GitDiffFile.sweepStaleTemporaryFiles()
+                    Task { await TerminalEnvironment.shared.reload() }
                     delegate.app = app
                     app.applyLaunchArgumentsOnce(CommandLine.arguments)
                 }

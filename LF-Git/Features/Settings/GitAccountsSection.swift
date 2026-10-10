@@ -18,9 +18,9 @@ struct GitAccountsSection: View {
             }
             TextField("Server", text: $model.host, prompt: Text("gitlab.company.com"))
                 .accessibilityIdentifier("account-host")
-            TextField("Username", text: $model.username, prompt: Text("LDAP username"))
+            TextField("Username", text: $model.username, prompt: Text("Username (for a token: your user name or any name)"))
                 .accessibilityIdentifier("account-username")
-            SecureField("Password", text: $model.password)
+            SecureField("Password or access token", text: $model.password)
                 .accessibilityIdentifier("account-password")
             HStack {
                 if let message = model.message {
@@ -32,9 +32,9 @@ struct GitAccountsSection: View {
                     .accessibilityIdentifier("account-add")
             }
         } header: {
-            Text("Git server accounts (LDAP)")
+            Text("Git server accounts (token, password or LDAP)")
         } footer: {
-            Text("For a GitLab that signs in with your company account. Use your LDAP username and password, over the VPN. The password is kept by git's credential helper (the macOS keychain), never by this app, so fetch, pull and push work without a prompt.")
+            Text("For a server that signs in with a personal access token (GitHub, GitLab, Bitbucket) or your company (LDAP) account. Enter the token as the password. It is kept by git's credential helper (the macOS keychain), never by this app, so fetch, pull and push work without a prompt. A login you already made in the terminal works without adding it here.")
         }
     }
 }
