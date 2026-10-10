@@ -206,3 +206,27 @@ struct KeyboardHelpView: View {
         .frame(width: 560, height: 440)
     }
 }
+
+#if DEBUG
+#Preview("Command palette") {
+    PreviewRepository(width: 560, height: 420) { repository, app in
+        CommandPaletteView(repository: repository, app: app)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Command log") {
+    PreviewRepository(width: 640, height: 420) { repository, app in
+        CommandLogView(repository: repository)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Keyboard help") {
+    PreviewRepository(width: 520, height: 520) { repository, app in
+        KeyboardHelpView(repository: repository)
+    }
+}
+#endif

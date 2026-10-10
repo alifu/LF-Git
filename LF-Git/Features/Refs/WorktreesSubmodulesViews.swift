@@ -128,3 +128,19 @@ struct SubmodulesSidebar: View {
         })
     }
 }
+
+#if DEBUG
+#Preview("Worktrees sidebar") {
+    PreviewRepository(width: 340, height: 400) { repository, app in
+        WorktreesSidebar(repository: repository, app: app)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Submodules sidebar") {
+    PreviewRepository(width: 340, height: 400) { repository, app in
+        SubmodulesSidebar(repository: repository, app: app)
+    }
+}
+#endif

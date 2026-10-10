@@ -326,3 +326,27 @@ struct HistoryDetailView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("History sidebar") {
+    PreviewRepository(width: 340, height: 600) { repository, app in
+        HistorySidebar(repository: repository, app: app)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Commit list") {
+    PreviewRepository(width: 500, height: 600) { repository, app in
+        CommitListView(repository: repository, app: app, model: repository.history)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("History detail") {
+    PreviewRepository(width: 800, height: 600) { repository, app in
+        HistoryDetailView(repository: repository, app: app, model: repository.history)
+    }
+}
+#endif

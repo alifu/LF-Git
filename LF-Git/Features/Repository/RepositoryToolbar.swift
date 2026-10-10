@@ -215,3 +215,27 @@ struct OperationBanner: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Branch menu") {
+    PreviewRepository() { repository, app in
+        BranchMenu(repository: repository, app: app).padding()
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Fetch / pull / push") {
+    PreviewRepository() { repository, app in
+        RemoteButtons(repository: repository, app: app).padding()
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Operation banner") {
+    PreviewRepository(width: 700) { repository, app in
+        OperationBanner(repository: repository, app: app)
+    }
+}
+#endif

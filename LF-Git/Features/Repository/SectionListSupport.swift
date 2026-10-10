@@ -56,3 +56,12 @@ extension View {
         }
     }
 }
+
+#Preview("Rows") {
+    List {
+        SimpleRow(symbol: "tag", title: "v1.0", subtitle: "First release", trailing: "a1b2c3d", identifier: "preview-row-1")
+        SimpleRow(symbol: "arrow.triangle.branch", symbolToken: .accentText, title: "feature/greeting",
+                  subtitle: "origin/feature/greeting", identifier: "preview-row-2")
+    }
+    .frame(width: 340, height: 160)
+}

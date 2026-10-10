@@ -207,3 +207,19 @@ struct BranchContextMenu: View {
         })
     }
 }
+
+#if DEBUG
+#Preview("Branches sidebar") {
+    PreviewRepository(width: 340, height: 600) { repository, app in
+        BranchesSidebar(repository: repository, app: app)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Branches detail") {
+    PreviewRepository(width: 800, height: 600) { repository, app in
+        BranchesDetail(repository: repository, app: app)
+    }
+}
+#endif

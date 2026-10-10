@@ -362,3 +362,27 @@ struct DiffContentView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Changes sidebar") {
+    PreviewRepository(width: 340, height: 600) { repository, app in
+        ChangesSidebar(repository: repository, app: app)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Commit box") {
+    PreviewRepository(width: 340) { repository, app in
+        CommitBox(repository: repository, app: app)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Changes detail") {
+    PreviewRepository(width: 800, height: 600) { repository, app in
+        ChangesDetailView(repository: repository, app: app)
+    }
+}
+#endif

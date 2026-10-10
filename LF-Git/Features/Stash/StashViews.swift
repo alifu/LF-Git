@@ -112,3 +112,19 @@ struct CommitViewerDetail: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Stash sidebar") {
+    PreviewRepository(width: 340, height: 500) { repository, app in
+        StashSidebar(repository: repository, app: app)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Commit viewer") {
+    PreviewRepository(width: 800, height: 500) { repository, app in
+        CommitViewerDetail(repository: repository, app: app)
+    }
+}
+#endif

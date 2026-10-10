@@ -231,3 +231,36 @@ private struct FileRow: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Repository window") {
+    PreviewRepository(width: 1200, height: 800) { repository, app in
+        RepositoryView(repository: repository, app: app)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Section grid") {
+    PreviewRepository(width: 360) { repository, app in
+        SectionGrid(repository: repository).padding()
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Conflicts sidebar") {
+    PreviewRepository(width: 320, height: 500) { repository, app in
+        ConflictsSidebar(repository: repository)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Repository window (dark)") {
+    PreviewRepository(width: 1200, height: 800) { repository, app in
+        RepositoryView(repository: repository, app: app)
+    }
+    .preferredColorScheme(.dark)
+}
+#endif

@@ -110,3 +110,19 @@ struct BisectBanner: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Bisect banner") {
+    PreviewRepository(width: 700) { repository, app in
+        BisectBanner(repository: repository, app: app)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Edit commit message") {
+    @Previewable @State var text = "Fix the greeting\n\nLonger explanation of why."
+    MessageEditorSheet(edit: PendingMessageEdit(title: "Reword Commit", initialText: text, confirmTitle: "Reword", action: { _ in }),
+                       text: $text, dismiss: {})
+}
+#endif

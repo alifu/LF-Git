@@ -169,3 +169,11 @@ struct FileDetailView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Conflicted file") {
+    PreviewRepository(width: 900, height: 650) { repository, app in
+        if let file = repository.files.first { FileDetailView(repository: repository, file: file, app: app) }
+    }
+}
+#endif

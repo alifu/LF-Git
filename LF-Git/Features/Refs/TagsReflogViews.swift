@@ -174,3 +174,19 @@ struct ReflogSidebar: View {
         app.run { try await repository.perform(title) { client, _ in try work(client) } }
     }
 }
+
+#if DEBUG
+#Preview("Tags sidebar") {
+    PreviewRepository(width: 340, height: 500) { repository, app in
+        TagsSidebar(repository: repository, app: app)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Reflog sidebar") {
+    PreviewRepository(width: 340, height: 500) { repository, app in
+        ReflogSidebar(repository: repository, app: app)
+    }
+}
+#endif

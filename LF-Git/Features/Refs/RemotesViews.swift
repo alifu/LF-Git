@@ -109,3 +109,19 @@ struct RemotesDetail: View {
         .background(.theme(.background))
     }
 }
+
+#if DEBUG
+#Preview("Remotes sidebar") {
+    PreviewRepository(width: 340, height: 500) { repository, app in
+        RemotesSidebar(repository: repository, app: app)
+    }
+}
+#endif
+
+#if DEBUG
+#Preview("Remotes detail") {
+    PreviewRepository(width: 700, height: 500) { repository, app in
+        RemotesDetail(repository: repository, app: app)
+    }
+}
+#endif

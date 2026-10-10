@@ -111,6 +111,25 @@ and resolve it the way VS Code does, but on files of any size.
 A 2,000,000-line file with 1,000 conflicts opens in about 2.6 s from launch; rows are read from the
 engine only when they scroll into view.
 
+### Redesigning the UI in Xcode
+
+Every screen has a SwiftUI preview (open a view file and show the canvas, ⌥⌘↩). Views that need a repository
+use `PreviewRepository` (`LF-Git/Preview/PreviewRepository.swift`, debug builds only), which builds a small sample
+repository on the fly: history with a feature branch and a tag, a stash, a remote, local edits and a merge stopped on
+a conflict, so lists, diffs, the graph and the Conflicts section all show real data.
+
+| File | Previews |
+|---|---|
+| `Repository/RepositoryView.swift` | whole window (light, dark), section grid, Conflicts sidebar |
+| `Repository/RepositoryToolbar.swift`, `RepositoryDialogs.swift` | branch menu, fetch/pull/push, operation banner, bisect banner, message editor |
+| `Changes/ChangesViews.swift` | sidebar, commit box, detail |
+| `Branches/`, `History/`, `Stash/`, `Refs/` | each sidebar and detail (branches, commit list, history detail, stash, tags, reflog, remotes, worktrees, submodules) |
+| `Palette/PaletteActions.swift` | command palette, command log, keyboard help |
+| `Editor/EditorView.swift` | a conflicted file |
+| `Settings/`, `Welcome/`, `ContentView.swift`, `Repository/SectionListSupport.swift` | settings, accounts, welcome, rows |
+
+Colors come from `Design/theme.json` through `LFThemeToken`, so a redesign changes the tokens, not the views.
+
 ## Command line
 
 ```bash

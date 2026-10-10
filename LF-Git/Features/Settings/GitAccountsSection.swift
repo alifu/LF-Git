@@ -38,3 +38,9 @@ struct GitAccountsSection: View {
         }
     }
 }
+
+#Preview("Git server accounts") {
+    Form { GitAccountsSection() }
+        .formStyle(.grouped)
+        .frame(width: 460, height: 420)
+}
