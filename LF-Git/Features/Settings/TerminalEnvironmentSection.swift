@@ -37,5 +37,5 @@ struct TerminalEnvironmentSection: View {
 #Preview("Terminal environment") {
     Form { TerminalEnvironmentSection() }
         .formStyle(.grouped)
-        .frame(width: 460, height: 360)
+        .frame(width: 520, height: 400)
 }

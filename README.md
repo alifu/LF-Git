@@ -82,17 +82,17 @@ palette and run in the repository (`$LFGIT_REPO`, `$LFGIT_BRANCH` are set):
 { "customCommands": [ { "name": "Prune merged branches", "command": "git branch --merged | grep -v '\\*' | xargs git branch -d" } ] }
 ```
 
-**Settings (⌘,):**
+**Settings (⌘,)** has four tabs: **Account** (commit author and git server accounts), **Network** (SSL verification), **Environment** (terminal environment) and **Theme** (dark mode):
 
-| Setting | What it does |
+| Setting (tab) | What it does |
 |---|---|
-| **Commit author** (name, email) | Writes `user.name` / `user.email` to your global `~/.gitconfig`, so commits from the app and from the terminal agree. Empty fields remove the entry; an email without `@` is refused |
-| **Verify SSL certificates** | `http.sslVerify`. On by default; switching it off shows a warning and applies to every https remote, so use it only for a server you trust |
-| **Git server accounts (token, password or LDAP)** | For a server that signs in with a **personal access token** (GitHub, GitLab, Bitbucket; enter the token as the password) or a company (LDAP) account, for example an internal GitLab behind a VPN: enter the server, your username and the password or token. The password is handed to git's own credential helper (the macOS keychain; `osxkeychain` is set up if you have no helper), never stored by the app, so fetch, pull and push work without a prompt. Remove an account to forget the password. A server with a private certificate authority may also need *Verify SSL certificates* off |
-| **Terminal environment** | On by default. An app started from the Dock does not get what your shell exports, so a token login that works in a terminal can fail in the app (`gh auth` or `git-credential-manager` helpers not found, `GITHUB_TOKEN` or the SSH agent missing). The app asks your login shell once at launch (with an 8 s limit) and gives git your `PATH`, `SSH_AUTH_SOCK`, `GIT_ASKPASS`/`GIT_SSH_COMMAND`, `GH_TOKEN`/`GITHUB_TOKEN`/`GITLAB_TOKEN` and similar token variables, proxy variables and `GCM_*`. Nothing else is taken (never `GIT_DIR` and the like), and the values are never shown or logged. The section shows which `git` is used and which names were imported; **Reload** re-reads the shell |
-| **Dark mode** / **Follow system appearance** | Dark or light for the whole app, or follow macOS |
+| **Commit author** (name, email; Account) | Writes `user.name` / `user.email` to your global `~/.gitconfig`, so commits from the app and from the terminal agree. Empty fields remove the entry; an email without `@` is refused |
+| **Verify SSL certificates** (Network) | `http.sslVerify`. On by default; switching it off shows a warning and applies to every https remote, so use it only for a server you trust |
+| **Git server accounts (token, password or LDAP)** (Account) | For a server that signs in with a **personal access token** (GitHub, GitLab, Bitbucket; enter the token as the password) or a company (LDAP) account, for example an internal GitLab behind a VPN: enter the server, your username and the password or token. The password is handed to git's own credential helper (the macOS keychain; `osxkeychain` is set up if you have no helper), never stored by the app, so fetch, pull and push work without a prompt. Remove an account to forget the password. A server with a private certificate authority may also need *Verify SSL certificates* off |
+| **Terminal environment** (Environment) | On by default. An app started from the Dock does not get what your shell exports, so a token login that works in a terminal can fail in the app (`gh auth` or `git-credential-manager` helpers not found, `GITHUB_TOKEN` or the SSH agent missing). The app asks your login shell once at launch (with an 8 s limit) and gives git your `PATH`, `SSH_AUTH_SOCK`, `GIT_ASKPASS`/`GIT_SSH_COMMAND`, `GH_TOKEN`/`GITHUB_TOKEN`/`GITLAB_TOKEN` and similar token variables, proxy variables and `GCM_*`. Nothing else is taken (never `GIT_DIR` and the like), and the values are never shown or logged. The section shows which `git` is used and which names were imported; **Reload** re-reads the shell |
+| **Dark mode** / **Follow system appearance** (Theme) | Dark or light for the whole app, or follow macOS |
 
-If a push, pull or fetch fails because of a login, the error ends with a hint to add a token under Settings. Accounts are added and removed at once. Name, email and SSL are saved with the **Save** button (**Revert** reloads the file); appearance applies at once.
+If a push, pull or fetch fails because of a login, the error ends with a hint to add a token under Settings. Accounts are added and removed at once. Name, email and SSL are saved with the **Save** button (shown on both Account and Network) (**Revert** reloads the file); appearance applies at once.
 
 Rewriting history works on the checked-out branch and refuses ranges that contain merge commits; your local edits
 are stashed and restored around it.

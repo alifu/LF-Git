@@ -193,4 +193,24 @@ final class LazygitUITests: GitUITestCase {
 
         XCTAssertTrue(waitUntil { (try? self.git("show", ":new.txt")) == "beta\n" || (try? self.git("show", ":new.txt")) == "beta" })
     }
+
+    func testSettingsHasTabsForAccountNetworkEnvironmentAndTheme() throws {
+        try commitHistory("base")
+        let app = launch(appearance: "light")
+        XCTAssertTrue(item(app, "palette-button").waitForExistence(timeout: 10))
+
+        app.typeKey(",", modifierFlags: .command)
+
+        let window = app.windows["Settings"].exists ? app.windows["Settings"] : app.windows.element(boundBy: 0)
+        XCTAssertTrue(app.textFields["settings-name"].waitForExistence(timeout: 10), "Account is the first tab")
+        for tab in ["Network", "Environment", "Theme"] {
+            XCTAssertTrue(app.buttons[tab].exists || app.radioButtons[tab].exists, "\(tab) tab exists")
+        }
+        (app.buttons["Network"].exists ? app.buttons["Network"] : app.radioButtons["Network"]).click()
+        XCTAssertTrue(item(app, "settings-ssl").waitForExistence(timeout: 5))
+        (app.buttons["Theme"].exists ? app.buttons["Theme"] : app.radioButtons["Theme"]).click()
+        XCTAssertTrue(item(app, "settings-dark").waitForExistence(timeout: 5))
+        attachScreenshot(app, named: "settings-theme")
+        _ = window
+    }
 }
