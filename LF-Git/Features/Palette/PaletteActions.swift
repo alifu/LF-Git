@@ -52,7 +52,7 @@ extension RepositoryModel {
         }
         git("reload", "Reload", symbol: "arrow.clockwise", hint: "⌘R") { await self.refresh(reloadDiffs: true) }
         git("bisect-reset", "Stop Bisecting", symbol: "stop.circle", enabled: isBisecting) { try await self.resetBisect() }
-        actions.append(PaletteAction(id: "command-log", title: "Show the Command Log", symbol: "terminal", hint: "⇧⌘L") { [self] in showsCommandLog = true })
+        actions.append(PaletteAction(id: "command-log", title: "Show or Hide the Log Panel", symbol: "terminal", hint: "⇧⌘L") { [self] in showsLogPanel.toggle() })
         actions.append(PaletteAction(id: "help", title: "Keyboard Shortcuts", symbol: "keyboard", hint: "⌘/") { [self] in showsHelp = true })
         actions += customCommandActions(app: app)
         return actions
@@ -129,52 +129,12 @@ struct CommandPaletteView: View {
     }
 }
 
-/// Every git command the app ran for the user.
-struct CommandLogView: View {
-    let repository: RepositoryModel
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Command Log").font(.headline)
-                Spacer()
-                Button("Copy All") {
-                    Clipboard.copy(repository.commandEntries.map(\.command).joined(separator: "\n"))
-                }
-                Button("Done") { repository.showsCommandLog = false }
-                    .keyboardShortcut(.defaultAction)
-            }
-            .padding(12)
-            Divider()
-            ScrollViewReader { proxy in
-                List(repository.commandEntries) { entry in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: entry.succeeded ? "checkmark.circle" : "xmark.circle")
-                            .foregroundStyle(.theme(entry.succeeded ? .accentText : .danger))
-                        Text(entry.command).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
-                        Spacer(minLength: 8)
-                        Text("\(Int(entry.duration * 1000)) ms").font(.caption).foregroundStyle(.theme(.textSubtle))
-                    }
-                    .id(entry.id)
-                }
-                .listStyle(.plain)
-                .onAppear { if let last = repository.commandEntries.last { proxy.scrollTo(last.id, anchor: .bottom) } }
-                .overlay {
-                    if repository.commandEntries.isEmpty { ContentUnavailableView("No commands yet", systemImage: "terminal") }
-                }
-            }
-        }
-        .frame(width: 680, height: 420)
-        .accessibilityIdentifier("command-log")
-    }
-}
-
 /// The shortcuts, grouped like the menus.
 struct KeyboardHelpView: View {
     let repository: RepositoryModel
 
     private static let groups: [(String, [(String, String)])] = [
-        ("Everywhere", [("⌘K", "Command palette"), ("⌘/", "This list"), ("⇧⌘L", "Command log"), ("⌃1 … ⌃0", "Go to a section"),
+        ("Everywhere", [("⌘K", "Command palette"), ("⌘/", "This list"), ("⇧⌘L", "Log panel"), ("⌃1 … ⌃0", "Go to a section"),
                         ("⌘R", "Reload"), ("⌘O", "Open repository"), ("⌥⌘Z", "Undo the last git move (reflog)")]),
         ("Remote", [("⌥⌘F", "Fetch"), ("⌥⌘L", "Pull"), ("⌥⌘P", "Push"), ("⎋", "Cancel is in the toolbar while a command runs")]),
         ("Changes", [("⌘↩", "Commit"), ("Click ± on a hunk", "Stage or unstage a hunk"), ("Select lines, then button", "Stage or discard lines")]),
@@ -211,14 +171,6 @@ struct KeyboardHelpView: View {
 #Preview("Command palette") {
     PreviewRepository(width: 560, height: 420) { repository, app in
         CommandPaletteView(repository: repository, app: app)
-    }
-}
-#endif
-
-#if DEBUG
-#Preview("Command log") {
-    PreviewRepository(width: 640, height: 420) { repository, app in
-        CommandLogView(repository: repository)
     }
 }
 #endif

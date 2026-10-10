@@ -40,7 +40,7 @@ xcodebuild -project LF-Git.xcodeproj -scheme LF-Git build
 The window has ten sections, reachable from the grid at the top of the sidebar, with **⌃1 … ⌃0**, or from the
 command palette (**⌘K**): **Changes · Branches · History · Stash · Tags · Remotes · Reflog · Worktrees ·
 Submodules · Conflicts**. Everything runs through your own `git`, so credentials, hooks and signing work as in a
-terminal, and every command is listed in the **command log** (⇧⌘L).
+terminal, and the **log panel** (⇧⌘L, or the terminal button in the toolbar) shows what is happening.
 
 | Section | What you can do |
 |---|---|
@@ -61,6 +61,19 @@ press Continue, without a terminal.
 
 The window follows edits made in an editor or terminal (file-system events), and **File › Open Recent** lists the
 repositories you used.
+
+**Log panel (⇧⌘L):** a panel at the bottom of the window that shows what happens, one line per event with its
+time:
+
+| Line | Meaning |
+|---|---|
+| ✓ / ✗ `git …` | every git command (and custom command) that ran, with its duration; ✗ when it failed |
+| ▶ Started / Finished: *action* | an action you started (Fetching, Pulling, Merging…) and how long it took |
+| ℹ Cancelled / stopped on conflicts / files changed outside the app | things that are not failures: you pressed Cancel, a merge waits for you in the banner, an editor or terminal changed files |
+| ⚠ Failed: *action*: *reason* | what went wrong, with git's own message |
+
+Filter by **All · Git · Actions · Problems**, copy the lines shown, clear the log, hide it, and drag its top edge to
+resize it. It keeps the newest 500 lines per window.
 
 **Custom commands:** put your own shell commands in `~/.config/lfgit/config.json`; they appear in the command
 palette and run in the repository (`$LFGIT_REPO`, `$LFGIT_BRANCH` are set):
@@ -104,7 +117,7 @@ and resolve it the way VS Code does, but on files of any size.
 | ⌘R | Reload (also reloads the diff on screen) |
 | ⌥⌘F / ⌥⌘L / ⌥⌘P | Fetch / pull / push |
 | ⌘↩ | Commit |
-| ⌘K / ⇧⌘L / ⌘/ | Command palette / command log / shortcut list |
+| ⌘K / ⇧⌘L / ⌘/ | Command palette / show or hide the log panel / shortcut list |
 | ⌃1 … ⌃0 | Go to a section |
 | ⌥⌘Z | Undo the last git move (reflog) |
 

@@ -132,7 +132,9 @@ final class RepositoryModel {
     private(set) var reflog: [GitReflogEntry] = []
     private(set) var worktrees: [GitWorktree] = []
     private(set) var submodules: [GitSubmodule] = []
-    private(set) var commandEntries: [GitCommandEntry] = []
+    /// Everything that happened in this window, newest last: git commands, actions and problems.
+    private(set) var activity: [LogEvent] = []
+    private var activityCounter = 0
     /// Commits copied for a later cherry-pick, oldest first.
     var copiedCommits: [GitCommit] = []
     var prompt: PendingPrompt?
@@ -153,7 +155,7 @@ final class RepositoryModel {
     private(set) var isBisecting = false
     private(set) var bisectCandidate: String?
     var confirmation: PendingConfirmation?
-    var showsCommandLog = false
+    var showsLogPanel = false
     var showsPalette = false
     var showsHelp = false
     var section: RepositorySection = .changes
@@ -204,6 +206,7 @@ final class RepositoryModel {
         watcher = RepositoryWatcher(root: root) { [weak self] in
             Task { @MainActor in
                 guard let self, !self.isBusy else { return }
+                self.record(.info, "Files changed outside the app: reloaded")
                 await self.refresh()
             }
         }
@@ -218,9 +221,21 @@ final class RepositoryModel {
         if let logObserver { commandLog.stopObserving(logObserver) }
     }
 
+    private static let activityCapacity = 500
+
+    /// Adds a line to the log panel.
+    func record(_ kind: LogEvent.Kind, _ text: String, succeeded: Bool = true, duration: TimeInterval? = nil, date: Date = Date()) {
+        activityCounter += 1
+        activity.append(LogEvent(id: activityCounter, date: date, kind: kind, text: text, succeeded: succeeded, duration: duration))
+        if activity.count > Self.activityCapacity { activity.removeFirst(activity.count - Self.activityCapacity) }
+    }
+
+    func clearActivity() {
+        activity = []
+    }
+
     private func append(_ entry: GitCommandEntry) {
-        commandEntries.append(entry)
-        if commandEntries.count > 300 { commandEntries.removeFirst(commandEntries.count - 300) }
+        record(.git, entry.command, succeeded: entry.succeeded, duration: entry.duration, date: entry.date)
     }
 
     /// Fails unless `url` is inside a git repository; the model is rooted at the top-level directory.
@@ -280,6 +295,9 @@ final class RepositoryModel {
     func perform(_ title: String, cancellable: Bool = false, serialized: Bool = true,
                  _ work: @escaping @Sendable (GitClient, GitCancellation) throws -> Void) async throws {
         busyTitle = title
+        let actionName = title.trimmingCharacters(in: CharacterSet(charactersIn: "…. "))
+        let started = Date()
+        record(.action, "Started: \(actionName)")
         let token = GitCancellation()
         activeCancellation = cancellable ? token : nil
         isCancellable = cancellable
@@ -301,9 +319,18 @@ final class RepositoryModel {
             // A merge, rebase or cherry-pick that stops on conflicts is not a failure: the banner takes over.
             // Only when this very call moved things: a failure while an old conflict was already waiting is real.
             let after = ConflictState(operation: operation, files: files.map(\.id), head: status.commitHash)
-            if after.operation != nil, !files.isEmpty, after != before, error is GitError, (error as? GitError) != .cancelled { return }
+            if after.operation != nil, !files.isEmpty, after != before, error is GitError, (error as? GitError) != .cancelled {
+                record(.info, "\(actionName) stopped on conflicts: resolve them, then Continue or Abort")
+                return
+            }
+            if (error as? GitError) == .cancelled {
+                record(.info, "Cancelled: \(actionName)")
+            } else {
+                record(.error, "Failed: \(actionName): \(error)", succeeded: false)
+            }
             throw error
         }
+        record(.action, "Finished: \(actionName)", duration: Date().timeIntervalSince(started))
         await refresh()
     }
 

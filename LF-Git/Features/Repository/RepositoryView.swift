@@ -26,6 +26,9 @@ struct RepositoryView: View {
                     }
                 }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if repository.showsLogPanel { LogPanelView(repository: repository) }
+        }
         .navigationTitle(repository.name)
         .toolbar {
             ToolbarItem(placement: .navigation) {
@@ -39,6 +42,11 @@ struct RepositoryView: View {
                     Label("Reload", systemImage: "arrow.clockwise")
                 }
                 .help("Reload (⌘R)")
+                Button { repository.showsLogPanel.toggle() } label: {
+                    Label("Log", systemImage: "terminal")
+                }
+                .help("Show or hide the log panel (⇧⌘L)")
+                .accessibilityIdentifier("log-button")
                 Button { repository.showsPalette = true } label: {
                     Label("Commands", systemImage: "command")
                 }

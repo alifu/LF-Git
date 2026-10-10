@@ -40,7 +40,7 @@ struct AppCommands: Commands {
             Button("Command Palette…") { repository?.showsPalette = true }
                 .keyboardShortcut("k")
                 .disabled(repository == nil)
-            Button("Command Log") { repository?.showsCommandLog = true }
+            Button("Toggle Log Panel") { repository?.showsLogPanel.toggle() }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
                 .disabled(repository == nil)
             Button("Keyboard Shortcuts") { repository?.showsHelp = true }

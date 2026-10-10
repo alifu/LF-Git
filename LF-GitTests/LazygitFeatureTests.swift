@@ -56,7 +56,7 @@ struct LazygitFeatureTests {
         try await model.changes.stage(["a.txt"])
         try await Task.sleep(for: .milliseconds(100)) // log entries arrive on the main actor a moment later
 
-        #expect(model.commandEntries.contains { $0.command == "git add -- a.txt" })
+        #expect(model.activity.contains { $0.kind == .git && $0.text == "git add -- a.txt" })
     }
 
     @Test("stashes, tags, remotes and the reflog are loaded with the rest of the state")

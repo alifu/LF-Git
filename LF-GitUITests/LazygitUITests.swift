@@ -122,6 +122,11 @@ final class LazygitUITests: GitUITestCase {
         XCTAssertTrue(log.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["git add -- base.txt"].waitForExistence(timeout: 5))
         attachScreenshot(app, named: "command-log")
+
+        app.buttons["log-clear"].click()
+        XCTAssertTrue(waitUntil(timeout: 5) { !app.staticTexts["git add -- base.txt"].exists }, "Clear empties the panel")
+        app.buttons["log-close"].click()
+        XCTAssertTrue(waitUntil(timeout: 5) { !log.exists }, "the panel closes")
     }
 
     func testReflogUndoBringsTheCommitBack() throws {

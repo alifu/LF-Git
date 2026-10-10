@@ -32,7 +32,6 @@ struct RepositoryDialogs: ViewModifier {
                 MessageEditorSheet(edit: edit, text: $messageText) { repository.messageEdit = nil }
             }
             .onChange(of: repository.messageEdit?.id) { messageText = repository.messageEdit?.initialText ?? "" }
-            .sheet(isPresented: $repository.showsCommandLog) { CommandLogView(repository: repository) }
             .sheet(isPresented: $repository.showsPalette) { CommandPaletteView(repository: repository, app: app) }
             .sheet(isPresented: $repository.showsHelp) { KeyboardHelpView(repository: repository) }
     }
