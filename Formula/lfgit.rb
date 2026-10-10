@@ -18,7 +18,9 @@ class Lfgit < Formula
     if app_buildable?
       # Ad-hoc signed (CODE_SIGN_IDENTITY=-), which is enough for an app that was built on this Mac.
       system "xcodebuild", "-project", "LF-Git.xcodeproj", "-scheme", "LF-Git", "-configuration", "Release",
-             "-derivedDataPath", buildpath/"build", "-enableCodeCoverage", "NO",
+             "-derivedDataPath", buildpath/"build", "CLANG_COVERAGE_MAPPING=NO", "ENABLE_CODE_COVERAGE=NO",
+             # Homebrew already sandboxes the build, and a sandbox cannot be nested (same as swift's --disable-sandbox).
+             "-IDEPackageSupportDisableManifestSandbox=1",
              "CODE_SIGN_IDENTITY=-", "ONLY_ACTIVE_ARCH=YES", "build"
       # `lfgit open` looks for LF-Git.app next to bin/, so the app lives in the keg's prefix.
       prefix.install "build/Build/Products/Release/LF-Git.app"

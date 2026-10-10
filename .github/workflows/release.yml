@@ -1,0 +1,74 @@
+name: Release
+
+# Push a tag such as v0.1.0 (the same number as MARKETING_VERSION in the Xcode project).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag, app, tool and formula name the same version
+        run: sh Scripts/release/check-version.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Test the package
+        run: swift test --package-path LFCore
+
+      - name: Build the app (universal, ad-hoc signed)
+        run: |
+          xcodebuild -project LF-Git.xcodeproj -scheme LF-Git -configuration Release \
+            -derivedDataPath build CLANG_COVERAGE_MAPPING=NO ENABLE_CODE_COVERAGE=NO \
+            CODE_SIGN_IDENTITY=- ONLY_ACTIVE_ARCH=NO build
+
+      - name: Build the command line tool (universal)
+        run: swift build --package-path LFCore -c release --disable-sandbox --arch arm64 --arch x86_64 --product lfgit
+
+      - name: Pack the prebuilt zip
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/stage
+          cp -R build/Build/Products/Release/LF-Git.app dist/stage/
+          cp LFCore/.build/apple/Products/Release/lfgit dist/stage/
+          cp LICENSE dist/stage/
+          cat > dist/stage/README.txt <<'TXT'
+          LF-Git is ad-hoc signed, not notarized (no Apple Developer account), so macOS blocks a downloaded copy.
+          Run once, then open it normally:
+            xattr -dr com.apple.quarantine LF-Git.app lfgit
+          Building from source with Homebrew avoids this: brew install alifu/tap/lfgit
+          TXT
+          ditto -c -k --keepParent dist/stage "dist/LF-Git-${version}-macos.zip"
+          shasum -a 256 "dist/LF-Git-${version}-macos.zip" > "dist/LF-Git-${version}-macos.zip.sha256"
+
+      - name: Source archive checksum for the formula
+        id: source
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          sha="$(curl -fsSL "$url" | shasum -a 256 | cut -d ' ' -f 1)"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "Homebrew (builds from source on your Mac, no Gatekeeper warning):"
+            echo
+            echo '```'
+            echo "brew install alifu/tap/lfgit"
+            echo '```'
+            echo
+            echo "Formula values: \`url \"$url\"\`, \`sha256 \"$sha\"\`"
+            echo
+            echo "The zip is ad-hoc signed and not notarized: run \`xattr -dr com.apple.quarantine LF-Git.app lfgit\` once."
+          } > dist/notes.md
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/LF-Git-*-macos.zip dist/LF-Git-*-macos.zip.sha256 \
+            --title "LF-Git ${GITHUB_REF_NAME#v}" --notes-file dist/notes.md

@@ -70,3 +70,21 @@ jobs:
             -only-testing:LF-GitTests \
             CODE_SIGN_IDENTITY=- \
             test
+
+  app-release:
+    name: macOS app (Release build, as Homebrew builds it)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          xcodebuild -project LF-Git.xcodeproj -scheme LF-Git -configuration Release \
+            -derivedDataPath build CLANG_COVERAGE_MAPPING=NO ENABLE_CODE_COVERAGE=NO \
+            CODE_SIGN_IDENTITY=- ONLY_ACTIVE_ARCH=YES build
+
+  versions:
+    name: Versions agree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh Scripts/release/check-version.sh

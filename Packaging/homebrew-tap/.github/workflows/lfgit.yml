@@ -1,0 +1,25 @@
+name: lfgit
+
+on:
+  push:
+    paths: ["Formula/lfgit.rb", ".github/workflows/lfgit.yml"]
+  pull_request:
+    paths: ["Formula/lfgit.rb", ".github/workflows/lfgit.yml"]
+
+jobs:
+  formula:
+    name: build from source, test, audit
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use this checkout as the tap
+        run: |
+          brew tap-new --no-git local/lfgit-ci
+          mkdir -p "$(brew --repository local/lfgit-ci)/Formula"
+          cp Formula/lfgit.rb "$(brew --repository local/lfgit-ci)/Formula/"
+      - name: Install from source
+        run: brew install --build-from-source --verbose local/lfgit-ci/lfgit
+      - name: brew test
+        run: brew test local/lfgit-ci/lfgit
+      - name: brew audit
+        run: brew audit --strict --formula local/lfgit-ci/lfgit
