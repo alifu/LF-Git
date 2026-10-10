@@ -156,13 +156,7 @@ public struct Git: Sendable {
             throw .launchFailed(error.localizedDescription)
         }
         let cancelKey = cancellation?.onCancel { stopper.stop(.cancelled) }
-        let timer = timeout.map { seconds -> DispatchSourceTimer in
-            let timer = DispatchSource.makeTimerSource(queue: .global())
-            timer.schedule(deadline: .now() + seconds)
-            timer.setEventHandler { stopper.stop(.timedOut(seconds: seconds)) }
-            timer.resume()
-            return timer
-        }
+        let timer = timeout.map { seconds in Watchdog(after: seconds) { stopper.stop(.timedOut(seconds: seconds)) } }
         process.waitUntilExit()
         timer?.cancel()
         if let cancelKey { cancellation?.remove(cancelKey) }
@@ -267,7 +261,7 @@ final class ProcessStopper: @unchecked Sendable {
         process.terminate()
         // ssh, hooks and shell pipelines are children of git: stop them too, or the work goes on unseen.
         children.forEach { kill($0, SIGTERM) }
-        DispatchQueue.global().asyncAfter(deadline: .now() + gracePeriod) { [process] in
+        _ = Watchdog(after: gracePeriod) { [process] in
             if process.isRunning { kill(pid, SIGKILL) }
             children.forEach { kill($0, SIGKILL) }
         }

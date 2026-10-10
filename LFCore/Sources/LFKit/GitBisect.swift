@@ -49,15 +49,28 @@ extension GitClient {
     }
 
     private func step(after result: GitResult) throws -> BisectStep {
-        let output = String(decoding: result.stdout, as: UTF8.self)
-        for line in output.split(separator: "\n") where line.hasSuffix(" is the first bad commit") {
-            return .found(String(line.prefix { !$0.isWhitespace }))
-        }
+        // Newer git prints its progress on stderr, and the wording has changed over versions: ask git where the
+        // search stands instead of reading its messages.
+        if let culprit = try firstBadCommit() { return .found(culprit) }
+        let output = String(decoding: result.stdout, as: UTF8.self) + "\n" + result.stderr
         var remaining: Int?
         if let line = output.split(separator: "\n").first(where: { $0.hasPrefix("Bisecting: ") }) {
             remaining = line.split(separator: " ").compactMap { Int($0) }.first
         }
         return .testing(hash: try git.run(["rev-parse", "HEAD"]).text, remaining: remaining)
+    }
+
+    /// The bad commit once nothing is left to test: git's next candidate is then the bad commit itself.
+    private func firstBadCommit() throws -> String? {
+        let bad = try git.run(["rev-parse", "--verify", "-q", "refs/bisect/bad"], allowedStatuses: [0, 1]).text
+        guard !bad.isEmpty else { return nil }
+        let goods = try git.run(["for-each-ref", "--format=%(refname)", "refs/bisect/good-*"]).text
+            .split(separator: "\n").map(String.init)
+        guard !goods.isEmpty else { return nil }
+        let vars = try git.run(["rev-list", "--bisect-vars", "refs/bisect/bad", "--not"] + goods).text
+        let next = vars.split(separator: "\n").first { $0.hasPrefix("bisect_rev=") }
+            .map { $0.dropFirst("bisect_rev=".count).trimmingCharacters(in: CharacterSet(charactersIn: "'\"")) }
+        return next == bad ? bad : nil
     }
 
     // MARK: Ignore

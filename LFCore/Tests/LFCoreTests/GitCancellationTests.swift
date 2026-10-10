@@ -11,7 +11,7 @@ struct GitCancellationTests {
     func cancelStops() throws {
         let fixture = try GitFixture()
         let token = GitCancellation()
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { token.cancel() }
+        Thread.detachNewThread { Thread.sleep(forTimeInterval: 0.3); token.cancel() }
         let started = Date()
 
         #expect(throws: GitError.cancelled) {

@@ -36,10 +36,7 @@ public enum LoginEnvironment {
         process.standardError = FileHandle.nullDevice
         do { try process.run() } catch { return [:] }
         let pid = process.processIdentifier
-        let timer = DispatchSource.makeTimerSource(queue: .global())
-        timer.schedule(deadline: .now() + timeout)
-        timer.setEventHandler { if process.isRunning { kill(pid, SIGKILL) } }
-        timer.resume()
+        let timer = Watchdog(after: timeout) { if process.isRunning { kill(pid, SIGKILL) } }
         process.waitUntilExit()
         timer.cancel()
         guard process.terminationReason == .exit, let data = try? Data(contentsOf: output) else { return [:] }

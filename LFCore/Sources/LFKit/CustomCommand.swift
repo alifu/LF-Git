@@ -74,13 +74,7 @@ extension GitClient {
         let stopper = ProcessStopper(process: process, gracePeriod: 2)
         do { try process.run() } catch { throw GitError.launchFailed(error.localizedDescription) }
         let key = cancellation?.onCancel { stopper.stop(.cancelled) }
-        let timer = timeout.map { seconds -> DispatchSourceTimer in
-            let timer = DispatchSource.makeTimerSource(queue: .global())
-            timer.schedule(deadline: .now() + seconds)
-            timer.setEventHandler { stopper.stop(.timedOut(seconds: seconds)) }
-            timer.resume()
-            return timer
-        }
+        let timer = timeout.map { seconds in Watchdog(after: seconds) { stopper.stop(.timedOut(seconds: seconds)) } }
         process.waitUntilExit()
         timer?.cancel()
         if let key { cancellation?.remove(key) }

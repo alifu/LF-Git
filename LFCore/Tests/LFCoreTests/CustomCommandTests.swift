@@ -29,7 +29,7 @@ struct CustomCommandTests {
         #expect(throws: GitError.timedOut(seconds: 1)) { try client.run(sleeper, timeout: 1) }
 
         let token = GitCancellation()
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { token.cancel() }
+        Thread.detachNewThread { Thread.sleep(forTimeInterval: 0.3); token.cancel() }
         #expect(throws: GitError.cancelled) { try client.run(sleeper, cancellation: token) }
     }
 
