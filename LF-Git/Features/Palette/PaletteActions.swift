@@ -20,8 +20,8 @@ extension RepositoryModel {
                           hint: index < 9 ? "⌃\(index + 1)" : "⌃0") { [self] in self.section = section }
         }
         func git(_ id: String, _ title: String, symbol: String, hint: String? = nil, enabled: Bool = true,
-                 _ work: @escaping () async throws -> Void) {
-            actions.append(PaletteAction(id: id, title: title, symbol: symbol, hint: hint, isEnabled: enabled) { app.run(work) })
+                 _ work: @escaping @MainActor () async throws -> Void) {
+            actions.append(PaletteAction(id: id, title: title, symbol: symbol, hint: hint, isEnabled: enabled) { app.run { try await work() } })
         }
         git("fetch", "Fetch", symbol: "arrow.triangle.2.circlepath", hint: "⌥⌘F", enabled: idle) { try await self.fetch() }
         git("pull", "Pull (fast-forward only)", symbol: "arrow.down", hint: "⌥⌘L", enabled: idle) { try await self.pull(.fastForwardOnly) }
