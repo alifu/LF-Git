@@ -69,6 +69,16 @@ palette and run in the repository (`$LFGIT_REPO`, `$LFGIT_BRANCH` are set):
 { "customCommands": [ { "name": "Prune merged branches", "command": "git branch --merged | grep -v '\\*' | xargs git branch -d" } ] }
 ```
 
+**Settings (⌘,):**
+
+| Setting | What it does |
+|---|---|
+| **Commit author** (name, email) | Writes `user.name` / `user.email` to your global `~/.gitconfig`, so commits from the app and from the terminal agree. Empty fields remove the entry; an email without `@` is refused |
+| **Verify SSL certificates** | `http.sslVerify`. On by default; switching it off shows a warning and applies to every https remote, so use it only for a server you trust |
+| **Dark mode** / **Follow system appearance** | Dark or light for the whole app, or follow macOS |
+
+Name, email and SSL are saved with the **Save** button (**Revert** reloads the file); appearance applies at once.
+
 Rewriting history works on the checked-out branch and refuses ranges that contain merge commits; your local edits
 are stashed and restored around it.
 
