@@ -8,6 +8,7 @@ struct EditorView: View {
     let repository: RepositoryModel
     let app: AppModel
     @State private var comparing: ComparedConflict?
+    @State private var editing: ComparedConflict?
     @State private var remergeMessage: String?
     @State private var confirmRemerge = false
 
@@ -20,7 +21,8 @@ struct EditorView: View {
             header
             Divider()
             HStack(spacing: 0) {
-                ConflictTableView(editor: editor) { comparing = ComparedConflict(id: $0) }
+                ConflictTableView(editor: editor, onCompare: { comparing = ComparedConflict(id: $0) },
+                                  onEdit: { editing = ComparedConflict(id: $0) })
                 Divider()
                 MinimapView(editor: editor)
             }
@@ -28,6 +30,7 @@ struct EditorView: View {
         .background(.theme(.background))
         .focusedSceneValue(\.editorModel, editor)
         .sheet(item: $comparing) { CompareView(editor: editor, conflict: $0.id) }
+        .sheet(item: $editing) { EditConflictView(editor: editor, conflict: $0.id) }
         .alert("Re-merge", isPresented: Binding(get: { remergeMessage != nil }, set: { if !$0 { remergeMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {

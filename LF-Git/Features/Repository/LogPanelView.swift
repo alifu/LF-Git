@@ -23,6 +23,7 @@ struct LogPanelView: View {
         }
         .frame(height: height)
         .background(.theme(.surfaceRaised))
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("command-log")
     }
 

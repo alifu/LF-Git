@@ -82,7 +82,7 @@ final class ConflictHeaderCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("header")
 
     enum Action: Int {
-        case current, incoming, both, base, compare, undo
+        case current, incoming, both, base, edit, compare, undo
     }
 
     var onAction: ((Int, Action) -> Void)?
@@ -119,6 +119,7 @@ final class ConflictHeaderCell: NSTableCellView {
             title.stringValue = "◀ \(side)"
             var actions: [(String, Action)] = [("Accept Current", .current), ("Accept Incoming", .incoming), ("Accept Both", .both)]
             if hasBase { actions.append(("Accept Base", .base)) }
+            actions.append(("Edit", .edit))
             actions.append(("Compare", .compare))
             for (index, action) in actions.enumerated() {
                 if index > 0 { buttons.addArrangedSubview(separator()) }
@@ -127,6 +128,8 @@ final class ConflictHeaderCell: NSTableCellView {
         } else {
             title.stringValue = "✓ \(Self.describe(choice))"
             buttons.addArrangedSubview(link("Undo", .undo))
+            buttons.addArrangedSubview(separator())
+            buttons.addArrangedSubview(link("Edit", .edit))
             buttons.addArrangedSubview(separator())
             buttons.addArrangedSubview(link("Compare", .compare))
         }

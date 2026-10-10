@@ -44,7 +44,7 @@ terminal, and the **log panel** (⇧⌘L, or the terminal button in the toolbar)
 
 | Section | What you can do |
 |---|---|
-| **Changes** | Stage/unstage files, **hunks** or **single lines** (select lines in the diff), discard (lines too), commit, amend, skip hooks, ignore a file (`.gitignore` or local exclude), stash one file, file history. Diff options: ignore whitespace, context size, rename detection |
+| **Changes** | Stage/unstage files, **hunks** or **single lines** (select lines in the diff; new files too), discard (lines too), commit, amend, skip hooks, ignore a file (`.gitignore` or local exclude), stash one file, file history. Diff options: ignore whitespace, context size, rename detection |
 | **Branches** | Checkout, new, rename, delete (local and on the remote), merge (default / no-ff / ff-only / squash), rebase onto, reset (soft/mixed/hard), fast-forward from upstream, set/unset upstream, compare with the current branch |
 | **History** | Graph, filter by message/author/file, **reword, edit, squash, fixup, drop, move up/down**, amend an older commit with staged changes, fixup commits and autosquash, revert, **cherry-pick** (copy commits, paste on another branch), reset, detached checkout, branch/tag from a commit, **bisect**, compare any two commits, **blame**, file history. Select lines of a commit's diff to apply them, revert them, or cut them out of the commit |
 | **Stash** | Stash all / with untracked / staged only / keep index, apply, pop, drop, rename, branch from stash, browse its diff |
@@ -99,7 +99,7 @@ are stashed and restored around it.
 `lfgit open` (in a repository) or **File › Open Repository…** shows every conflicted file; pick one
 and resolve it the way VS Code does, but on files of any size.
 
-- Each conflict has **Accept Current · Accept Incoming · Accept Both · Accept Base · Compare**; a
+- Each conflict has **Accept Current · Accept Incoming · Accept Both · Accept Base · Edit · Compare**. **Edit** opens a box to write the result by hand when you need code from both sides (or something new): start from Current, Incoming, Both or Base and change anything; Undo/Redo and a Windows-style file's line endings are kept; a
   resolved conflict stays visible with the discarded side struck through, and **Undo** is one click away.
 - The conflict map on the right shows where conflicts are and which are resolved; click to jump.
 - **Re-merge Project** merges `project.pbxproj` object by object; binary files offer *Use Current* /

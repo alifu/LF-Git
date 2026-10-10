@@ -47,6 +47,28 @@ final class ConflictResolutionUITests: XCTestCase {
         attachScreenshot(app, named: "resolved-light")
     }
 
+    func testEditAConflictToKeepCodeFromBothSides() throws {
+        let app = launch(appearance: "light")
+        let edit = app.buttons["edit-0"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 10), "every open conflict offers Edit")
+        edit.click()
+
+        let box = app.textViews["edit-text"]
+        XCTAssertTrue(box.waitForExistence(timeout: 5))
+        attachScreenshot(app, named: "edit-conflict")
+        app.buttons["edit-start-both"].click()
+        box.click()
+        app.typeKey("a", modifierFlags: .command)
+        box.typeText("let greeting = \"hello from both\"\n")
+        app.buttons["edit-apply"].click()
+
+        XCTAssertTrue(app.staticTexts["All 1 resolved"].waitForExistence(timeout: 5))
+        app.buttons["save"].click()
+        XCTAssertTrue(waitUntil { (try? self.git("diff", "--name-only", "--diff-filter=U").isEmpty) == true })
+        let saved = try String(contentsOf: repository.appendingPathComponent("Sources/App.swift"), encoding: .utf8)
+        XCTAssertEqual(saved, "import Foundation\n\nlet greeting = \"hello from both\"\nlet count = 1\n")
+    }
+
     func testKeyboardShortcutsAndUndo() throws {
         let app = launch(appearance: "light")
         XCTAssertTrue(app.buttons["accept-current-0"].waitForExistence(timeout: 10))

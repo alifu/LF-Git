@@ -72,6 +72,56 @@ struct GitClientLineTests {
         #expect(!staged.contains("line 4"))
     }
 
+    @Test("single lines of a new, untracked file can be staged, and the rest follows later")
+    func stageLinesOfNewFile() throws {
+        let fixture = try GitFixture()
+        try fixture.commit("base.txt", "x\n")
+        fixture.sandbox.write("n.txt", "one\ntwo\nthree\n")
+        let client = GitClient(directory: fixture.directory)
+        let diff = try client.diff(of: .untracked(path: "n.txt"))
+        let hunk = try #require(diff.index.hunks.first)
+
+        try client.applyLines(diffLines(diff, starting: "+one").union(diffLines(diff, starting: "+three")),
+                              in: hunk, of: diff, stage: true)
+
+        #expect(String(decoding: try fixture.git.run(["show", ":n.txt"]).stdout, as: UTF8.self) == "one\nthree\n")
+        #expect(fixture.read("n.txt") == "one\ntwo\nthree\n", "the file on disk is untouched")
+
+        let rest = try client.diff(of: .workingTree(path: "n.txt", staged: false))
+        let restHunk = try #require(rest.index.hunks.first)
+        try client.applyLines(diffLines(rest, starting: "+two"), in: restHunk, of: rest, stage: true)
+        #expect(String(decoding: try fixture.git.run(["show", ":n.txt"]).stdout, as: UTF8.self) == "one\ntwo\nthree\n")
+    }
+
+    @Test("staged lines of a new file can be unstaged one by one")
+    func unstageLinesOfNewFile() throws {
+        let fixture = try GitFixture()
+        try fixture.commit("base.txt", "x\n")
+        fixture.sandbox.write("n.txt", "one\ntwo\nthree\n")
+        let client = GitClient(directory: fixture.directory)
+        try client.stage(["n.txt"])
+        let diff = try client.diff(of: .workingTree(path: "n.txt", staged: true))
+        let hunk = try #require(diff.index.hunks.first)
+
+        try client.applyLines(diffLines(diff, starting: "+two"), in: hunk, of: diff, stage: false)
+
+        #expect(String(decoding: try fixture.git.run(["show", ":n.txt"]).stdout, as: UTF8.self) == "one\nthree\n")
+    }
+
+    @Test("lines of a new, untracked file can be discarded one by one")
+    func discardLinesOfNewFile() throws {
+        let fixture = try GitFixture()
+        try fixture.commit("base.txt", "x\n")
+        fixture.sandbox.write("n.txt", "one\ntwo\nthree\n")
+        let client = GitClient(directory: fixture.directory)
+        let diff = try client.diff(of: .untracked(path: "n.txt"))
+        let hunk = try #require(diff.index.hunks.first)
+
+        try client.discardLines(diffLines(diff, starting: "+two"), in: hunk, of: diff)
+
+        #expect(fixture.read("n.txt") == "one\nthree\n")
+    }
+
     @Test("selected lines are discarded from the work tree only")
     func discardLines() throws {
         let (fixture, client) = try editedFixture()

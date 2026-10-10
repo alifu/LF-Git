@@ -22,6 +22,7 @@ nonisolated struct DocumentSnapshot: Sendable {
     var choices: [LFChoice] = []
     var labels: [EditorModel.Labels] = []
     var hasBase: [Bool] = []
+    var usesCRLF = false
 }
 
 /// One conflicted text file being resolved: rows come straight from the C engine on demand, so the
@@ -43,7 +44,8 @@ final class EditorModel {
 
     /// One user action; accept-all is one action covering many conflicts.
     private struct Change {
-        let entries: [(index: Int, from: LFChoice, to: LFChoice)]
+        typealias Entry = (index: Int, from: LFChoice, to: LFChoice, fromText: String?, toText: String?)
+        let entries: [Entry]
     }
 
     static let maxDisplayedColumns = 4000
@@ -65,6 +67,10 @@ final class EditorModel {
     private var document: LFDocument { box.document }
     private(set) var choices: [LFChoice]
     private var savedChoices: [LFChoice]
+    /// The text the user typed for each edited conflict (kept after switching to another choice, so Edit reopens it).
+    private var customTexts: [Int: String] = [:]
+    private var savedCustomTexts: [Int: String] = [:]
+    private let usesCRLF: Bool
     private var undoStack: [Change] = []
     private var redoStack: [Change] = []
 
@@ -88,6 +94,7 @@ final class EditorModel {
         spans = snapshot.spans
         choices = snapshot.choices
         savedChoices = snapshot.choices
+        usesCRLF = snapshot.usesCRLF
         labelList = snapshot.labels
         hasBaseSection = snapshot.hasBase
         classifier = LineClassifier(spans: snapshot.spans)
@@ -105,6 +112,7 @@ final class EditorModel {
         let document = try LFDocument(path: path, markerSize: markerSize)
         let info = document.info
         var snapshot = DocumentSnapshot(lineCount: info.lineCount)
+        snapshot.usesCRLF = info.eol == .crlf
         for index in 0..<info.conflictCount {
             let conflict = try document.conflict(at: index) // a gap would misalign every later conflict
             snapshot.spans.append(ConflictSpan(index: index, openLine: conflict.openLine, baseLine: conflict.baseLine,
@@ -125,7 +133,7 @@ final class EditorModel {
 
     var unresolvedCount: Int { choices.lazy.filter { $0 == .unresolved }.count }
     var conflictCount: Int { spans.count }
-    var hasUnsavedChanges: Bool { choices != savedChoices }
+    var hasUnsavedChanges: Bool { choices != savedChoices || effectiveCustomTexts(choices, customTexts) != effectiveCustomTexts(savedChoices, savedCustomTexts) }
     var canUndo: Bool { !undoStack.isEmpty && !isSaving }
     var canRedo: Bool { !redoStack.isEmpty && !isSaving }
 
@@ -163,6 +171,18 @@ final class EditorModel {
         return text
     }
 
+    /// Only the texts that are actually in use count (a custom text left behind by another choice does not).
+    private func effectiveCustomTexts(_ choices: [LFChoice], _ texts: [Int: String]) -> [Int: String] {
+        texts.filter { choices.indices.contains($0.key) && choices[$0.key] == .custom }
+    }
+
+    /// What the Edit box starts with: the text edited before, or both sides, current first.
+    func initialEditText(of conflict: Int) -> String {
+        if let text = customTexts[conflict] { return text }
+        let sides = sides(of: conflict)
+        return sides.current + sides.incoming
+    }
+
     func sides(of conflict: Int) -> Sides {
         guard let raw = try? document.conflict(at: conflict) else {
             return Sides(current: "", base: nil, incoming: "", currentLabel: "", incomingLabel: "")
@@ -179,20 +199,30 @@ final class EditorModel {
     // MARK: - Resolving
 
     func resolve(_ conflict: Int, as choice: LFChoice) {
-        apply(Change(entries: [(conflict, self.choice(of: conflict), choice)]), record: true)
+        apply(Change(entries: [entry(conflict, to: choice, text: nil)]), record: true)
+    }
+
+    /// Resolves a conflict with text the user wrote (for code that belongs to both sides, or neither).
+    func edit(_ conflict: Int, text: String) {
+        apply(Change(entries: [entry(conflict, to: .custom, text: text)]), record: true)
+    }
+
+    private func entry(_ conflict: Int, to choice: LFChoice, text: String?) -> Change.Entry {
+        let current = self.choice(of: conflict)
+        return (conflict, current, choice, current == .custom ? customTexts[conflict] : nil, text)
     }
 
     /// Applies one choice to every conflict as a single undo step. The base choice skips conflicts without a base.
     func resolveAll(as choice: LFChoice) {
         let entries = choices.indices
             .filter { choice != .base || hasBase($0) }
-            .map { (index: $0, from: choices[$0], to: choice) }
+            .map { entry($0, to: choice, text: nil) }
         apply(Change(entries: entries), record: true)
     }
 
     func undo() {
         guard canUndo, let change = undoStack.popLast() else { return }
-        apply(Change(entries: change.entries.reversed().map { ($0.index, $0.to, $0.from) }), record: false)
+        apply(Change(entries: change.entries.reversed().map { ($0.index, $0.to, $0.from, $0.toText, $0.fromText) }), record: false)
         redoStack.append(change)
     }
 
@@ -204,10 +234,15 @@ final class EditorModel {
 
     private func apply(_ change: Change, record: Bool) {
         guard !isSaving else { return } // the document is being written; see DocumentBox
-        var applied: [(index: Int, from: LFChoice, to: LFChoice)] = []
-        for entry in change.entries where choices.indices.contains(entry.index) && entry.from != entry.to {
+        var applied: [Change.Entry] = []
+        for entry in change.entries where choices.indices.contains(entry.index) && (entry.from != entry.to || entry.fromText != entry.toText) {
             do {
-                try document.resolve(entry.index, as: entry.to)
+                if entry.to == .custom, let text = entry.toText {
+                    try document.setCustom(entry.index, bytes: Array(fileText(text).utf8))
+                    customTexts[entry.index] = text
+                } else {
+                    try document.resolve(entry.index, as: entry.to)
+                }
                 choices[entry.index] = entry.to
                 applied.append(entry)
             } catch {
@@ -220,6 +255,12 @@ final class EditorModel {
             redoStack.removeAll()
         }
         revision += 1
+    }
+
+    /// The box shows plain `\n`; a Windows-style file keeps its `\r\n`.
+    private func fileText(_ text: String) -> String {
+        let unix = text.replacingOccurrences(of: "\r\n", with: "\n")
+        return usesCRLF ? unix.replacingOccurrences(of: "\n", with: "\r\n") : unix
     }
 
     // MARK: - Navigation
@@ -260,8 +301,10 @@ final class EditorModel {
         isSaving = true
         defer { isSaving = false }
         let snapshot = choices
+        let savedTexts = customTexts
         try await Self.write(box)
         savedChoices = snapshot
+        savedCustomTexts = savedTexts
         revision += 1
         if stageOnSave, unresolvedCount == 0, let repository {
             try await Self.stage(displayPath, in: repository)

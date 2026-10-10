@@ -6,6 +6,7 @@ import SwiftUI
 struct ConflictTableView: NSViewRepresentable {
     let editor: EditorModel
     var onCompare: (Int) -> Void
+    var onEdit: (Int) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(editor: editor)
@@ -43,6 +44,7 @@ struct ConflictTableView: NSViewRepresentable {
         let focus = editor.focusedConflict
         let scrollRequest = editor.scrollRequest
         context.coordinator.onCompare = onCompare
+        context.coordinator.onEdit = onEdit
         context.coordinator.show(editor)
         context.coordinator.update(revision: revision, focus: focus, scrollRequest: scrollRequest)
     }
@@ -51,6 +53,7 @@ struct ConflictTableView: NSViewRepresentable {
         private(set) var editor: EditorModel
         weak var table: NSTableView?
         var onCompare: (Int) -> Void = { _ in }
+        var onEdit: (Int) -> Void = { _ in }
         private var shownRevision = -1
         private var shownFocus: Int?
         private var shownScrollRequest = -1
@@ -170,6 +173,7 @@ struct ConflictTableView: NSViewRepresentable {
             case .both: editor.resolve(conflict, as: .bothCurrentFirst)
             case .base: editor.resolve(conflict, as: .base)
             case .undo: editor.resolve(conflict, as: .unresolved)
+            case .edit: onEdit(conflict)
             case .compare: onCompare(conflict)
             }
         }

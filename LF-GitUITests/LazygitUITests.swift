@@ -123,9 +123,9 @@ final class LazygitUITests: GitUITestCase {
         XCTAssertTrue(app.staticTexts["git add -- base.txt"].waitForExistence(timeout: 5))
         attachScreenshot(app, named: "command-log")
 
-        app.buttons["log-clear"].click()
+        item(app, "log-clear").click()
         XCTAssertTrue(waitUntil(timeout: 5) { !app.staticTexts["git add -- base.txt"].exists }, "Clear empties the panel")
-        app.buttons["log-close"].click()
+        item(app, "log-close").click()
         XCTAssertTrue(waitUntil(timeout: 5) { !log.exists }, "the panel closes")
     }
 
@@ -173,5 +173,24 @@ final class LazygitUITests: GitUITestCase {
         let staged = try git("diff", "--cached", "-U0")
         XCTAssertTrue(staged.contains("+line 3 changed"))
         XCTAssertFalse(staged.contains("line 5"))
+    }
+
+    func testStageSingleLinesOfANewFile() throws {
+        try commitHistory("base")
+        try write("new.txt", "alpha\nbeta\ngamma\n")
+        let app = launch(appearance: "light")
+
+        item(app, "change-unstaged-new.txt").click()
+        let diff = app.tables["diff-view"]
+        XCTAssertTrue(diff.waitForExistence(timeout: 10))
+        let beta = diff.staticTexts.matching(NSPredicate(format: "value == %@", "+beta")).firstMatch
+        XCTAssertTrue(beta.waitForExistence(timeout: 5), "the diff rows can be found")
+        beta.click()
+
+        let stageLines = app.buttons["stage-lines"]
+        XCTAssertTrue(stageLines.waitForExistence(timeout: 5), "a new file offers line staging")
+        stageLines.click()
+
+        XCTAssertTrue(waitUntil { (try? self.git("show", ":new.txt")) == "beta\n" || (try? self.git("show", ":new.txt")) == "beta" })
     }
 }

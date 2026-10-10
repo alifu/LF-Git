@@ -326,8 +326,10 @@ struct ChangesDetailView: View {
     }
 
     private func canPickLines(selection: ChangeSelection, change: GitChange) -> Bool {
-        changes.diffSelection == selection && change.kind == .ordinary && changes.diff?.isStageable == true
-            && (selection.staged ? change.index : change.worktree) == .modified
+        guard changes.diffSelection == selection, changes.diff?.isStageable == true else { return false }
+        // A new file can be staged line by line too (git registers it as "intent to add" first).
+        if change.kind == .untracked { return !selection.staged }
+        return change.kind == .ordinary && [.modified, .added].contains(selection.staged ? change.index : change.worktree)
     }
 
     /// Single hunks can be staged for ordinary modifications; new, deleted and renamed files go as a whole.

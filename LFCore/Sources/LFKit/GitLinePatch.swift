@@ -62,15 +62,25 @@ extension GitClient {
         return patch
     }
 
+    /// The path when the diff creates a file (`--- /dev/null`), otherwise nil.
+    private func createdFilePath(of diff: GitDiffFile) throws -> String? {
+        let text = String(decoding: try diff.fileHeader(), as: UTF8.self)
+        guard text.contains("--- /dev/null"), let path = Self.headerPath(text) else { return nil }
+        return path
+    }
+
+    private static func headerPath(_ header: String) -> String? {
+        guard let first = header.split(separator: "\n").first, first.hasPrefix("diff --git a/"),
+              let split = first.range(of: " b/", options: .backwards) else { return nil }
+        return String(first[first.index(first.startIndex, offsetBy: "diff --git a/".count)..<split.lowerBound])
+    }
+
     /// The file header; for an added or deleted file a plain modification header, because a partial patch no longer
     /// creates or removes the file.
     private func plainHeader(of diff: GitDiffFile) throws -> Data {
         let header = try diff.fileHeader()
         let text = String(decoding: header, as: UTF8.self)
-        guard text.contains("--- /dev/null") || text.contains("+++ /dev/null"),
-              let first = text.split(separator: "\n").first, first.hasPrefix("diff --git a/"),
-              let split = first.range(of: " b/", options: .backwards) else { return header }
-        let path = String(first[first.index(first.startIndex, offsetBy: "diff --git a/".count)..<split.lowerBound])
+        guard text.contains("--- /dev/null") || text.contains("+++ /dev/null"), let path = Self.headerPath(text) else { return header }
         return Data("diff --git a/\(path) b/\(path)\n--- a/\(path)\n+++ b/\(path)\n".utf8)
     }
 
@@ -79,7 +89,17 @@ extension GitClient {
     /// Stages (`stage: true`, for an unstaged diff) or unstages (`stage: false`, for a staged diff) only these lines.
     public func applyLines(_ lines: Set<Int>, in hunk: DiffHunk, of diff: GitDiffFile, stage: Bool) throws {
         let patch = try partialPatch(of: hunk, in: diff, selecting: lines, reverse: !stage)
-        try git.run(["apply", "--cached", "--recount", "--whitespace=nowarn"] + (stage ? [] : ["--reverse"]), stdin: patch)
+        // A file git does not know yet has no index entry to patch: register it as "intent to add" (an empty
+        // entry), so only the chosen lines go in and the rest stays unstaged.
+        let newFile = stage ? try createdFilePath(of: diff) : nil
+        if let newFile { try git.run(["add", "--intent-to-add", "--", newFile]) }
+        do {
+            try git.run(["apply", "--cached", "--recount", "--whitespace=nowarn"] + (stage ? [] : ["--reverse"]), stdin: patch)
+        } catch {
+            // Leave the file untracked again rather than half registered.
+            if let newFile { _ = try? git.run(["rm", "--cached", "-q", "--", newFile]) }
+            throw error
+        }
     }
 
     /// Throws away only these lines of an unstaged diff.
