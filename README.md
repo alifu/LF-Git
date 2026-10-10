@@ -75,9 +75,10 @@ palette and run in the repository (`$LFGIT_REPO`, `$LFGIT_BRANCH` are set):
 |---|---|
 | **Commit author** (name, email) | Writes `user.name` / `user.email` to your global `~/.gitconfig`, so commits from the app and from the terminal agree. Empty fields remove the entry; an email without `@` is refused |
 | **Verify SSL certificates** | `http.sslVerify`. On by default; switching it off shows a warning and applies to every https remote, so use it only for a server you trust |
+| **Git server accounts (LDAP)** | For an internal GitLab (for example behind a VPN) that signs in with a company account: enter the server, your LDAP username and password. The password is handed to git's own credential helper (the macOS keychain; `osxkeychain` is set up if you have no helper), never stored by the app, so fetch, pull and push work without a prompt. Remove an account to forget the password. A server with a private certificate authority may also need *Verify SSL certificates* off |
 | **Dark mode** / **Follow system appearance** | Dark or light for the whole app, or follow macOS |
 
-Name, email and SSL are saved with the **Save** button (**Revert** reloads the file); appearance applies at once.
+Accounts are added and removed at once. Name, email and SSL are saved with the **Save** button (**Revert** reloads the file); appearance applies at once.
 
 Rewriting history works on the checked-out branch and refuses ranges that contain merge commits; your local edits
 are stashed and restored around it.

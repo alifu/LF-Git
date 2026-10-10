@@ -127,7 +127,8 @@ public struct Git: Sendable {
         if let stdin {
             let url = scratch.appendingPathComponent("lfgit-git-\(UUID().uuidString).in")
             inputFile = url
-            guard (try? stdin.write(to: url)) != nil else {
+            // Input may hold a password: only this user may read it, even for the moment it exists.
+            guard Self.writePrivately(stdin, to: url) else {
                 throw .launchFailed("cannot create a temporary file for git's input")
             }
             process.standardInput = try open(url, forWriting: false, what: "input")
@@ -163,6 +164,14 @@ public struct Git: Sendable {
         let output = outputFile == nil ? ((try? Data(contentsOf: outputURL)) ?? Data()) : Data()
         return GitResult(status: process.terminationStatus, stdout: output,
                          stderr: errorText.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// Creates the file with mode 0600 from the start (O_EXCL, so nothing pre-planted is followed).
+    private static func writePrivately(_ data: Data, to url: URL) -> Bool {
+        let descriptor = open(url.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        guard descriptor >= 0 else { return false }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        return (try? handle.write(contentsOf: data)) != nil
     }
 
     public func repositoryRoot() throws(GitError) -> URL {

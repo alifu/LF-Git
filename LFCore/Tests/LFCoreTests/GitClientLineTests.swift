@@ -344,13 +344,21 @@ struct GitClientReviewFixTests {
     func stopsChildren() throws {
         let sandbox = Sandbox()
         let marker = sandbox.path("alive")
+        let started = sandbox.path("started")
         let fixture = try GitFixture()
         let token = GitCancellation()
-        DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) { token.cancel() }
+        // Cancel only once the child exists; on a busy machine a fixed delay can fire before it was started.
+        // A dedicated thread: the shared pool can be fully busy with other tests' blocking git calls.
+        Thread.detachNewThread {
+            let deadline = Date().addingTimeInterval(20)
+            while !FileManager.default.fileExists(atPath: started), Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
+            Thread.sleep(forTimeInterval: 0.3)
+            token.cancel()
+        }
 
         #expect(throws: GitError.cancelled) {
             try GitClient(directory: fixture.directory).run(
-                CustomCommand(name: "x", command: "(sleep 5; touch '\(marker)') & wait"), cancellation: token)
+                CustomCommand(name: "x", command: "(touch '\(started)'; sleep 5; touch '\(marker)') & wait"), cancellation: token)
         }
         Thread.sleep(forTimeInterval: 6)
 
