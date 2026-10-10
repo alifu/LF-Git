@@ -34,8 +34,11 @@ brew install --build-from-source local/lfgit-test/lfgit && brew test local/lfgit
 
 ## Notes
 
-- Building the app needs full Xcode 26 or later; with only the Command Line Tools the formula installs the `lfgit`
-  command line tool and says so.
+- The formula requires Xcode 26 or later (`depends_on xcode: ["26.0", :build]`). The command line tool alone builds with
+  `swift build --package-path LFCore -c release --product lfgit` and needs only a Swift toolchain.
+- Inside Homebrew's build sandbox `xcodebuild` cannot nest a second sandbox, so the formula passes
+  `-IDEPackageSupportDisableManifestSandbox=1` and `OTHER_SWIFT_FLAGS=-disable-sandbox` (needed for SwiftPM and for the
+  `@Observable` / `#Preview` macros).
 - `lfgit open` finds `LF-Git.app` next to `bin/` in the keg; `brew` prints how to link it into `/Applications`.
 - The prebuilt zip is best effort: it is ad-hoc signed, and the user must run `xattr -dr com.apple.quarantine` once.
 - If you later get a Developer ID: add Hardened Runtime and notarization to the Release workflow and publish a cask.

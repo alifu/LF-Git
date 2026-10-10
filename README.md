@@ -2,7 +2,7 @@
 
 A native macOS merge tool and Git client for resolving conflicts in **files of any size**, from a Swift source file to an Xcode `project.pbxproj` with millions of lines.
 
-> **Status:** early development. The C engine, the `lfgit` command line tool, the semantic `.pbxproj` merge and the macOS app, including a Git client, work (phases 1–5); Homebrew packaging is next.
+> **Status:** early development (v0.1.0). The C engine, the `lfgit` command line tool, the semantic `.pbxproj` merge and the macOS app, including a Git client, work; the Homebrew formula and release workflow are ready, and the tap is published with the first release.
 
 ## Goals
 
@@ -211,7 +211,23 @@ python3 LFCore/Scripts/gen_conflicts.py --lines 1000000 --conflicts 1000 --kind 
 
 ## Install
 
-Homebrew (build from source) is planned: `brew install alifu/tap/lfgit`.
+Homebrew builds LF-Git **from source on your Mac**. Software compiled locally is never quarantined, so Gatekeeper
+has nothing to block (LF-Git is not notarized: there is no Apple Developer account).
+
+```bash
+brew install alifu/tap/lfgit      # needs Xcode 26 or later; takes a few minutes
+lfgit --version
+lfgit install                     # use lfgit as `git mergetool` (--global for every repository)
+lfgit open                        # open this repository in the app
+ln -sf "$(brew --prefix lfgit)/LF-Git.app" /Applications/LF-Git.app   # optional: Launchpad and Spotlight
+```
+
+The formula installs `lfgit` into `bin/` and `LF-Git.app` (ad-hoc signed) next to it, where `lfgit open` finds it.
+Upgrade with `brew upgrade lfgit`; remove with `brew uninstall lfgit`.
+
+A prebuilt zip is attached to each GitHub release for people without Xcode. It is ad-hoc signed only, so macOS
+blocks the downloaded copy until you run `xattr -dr com.apple.quarantine LF-Git.app lfgit` once. Maintainers: see
+[RELEASING.md](RELEASING.md).
 
 ## License
 
