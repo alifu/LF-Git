@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag such as v0.1.0 (the same number as MARKETING_VERSION in the Xcode project).
+# Push a tag such as v0.1.1 (the same number as MARKETING_VERSION in the Xcode project).
 on:
   push:
     tags: ["v*"]

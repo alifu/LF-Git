@@ -2,7 +2,7 @@
 
 A native macOS merge tool and Git client for resolving conflicts in **files of any size**, from a Swift source file to an Xcode `project.pbxproj` with millions of lines.
 
-> **Status:** early development (v0.1.0). The C engine, the `lfgit` command line tool, the semantic `.pbxproj` merge and the macOS app, including a Git client, work; the Homebrew formula and release workflow are ready, and the tap is published with the first release.
+> **Status:** early development (v0.1.1). The C engine, the `lfgit` command line tool, the semantic `.pbxproj` merge and the macOS app, including a Git client, work; the Homebrew formula and release workflow are ready, and the tap is published with the first release.
 
 ## Goals
 
@@ -19,6 +19,7 @@ A native macOS merge tool and Git client for resolving conflicts in **files of a
 | `LF-Git.xcodeproj`, `LF-Git/` | SwiftUI macOS app |
 | `LFCore/` | Swift package: C engine (`LFCore`), Swift wrapper (`LFKit`), CLI (`lfgit`) |
 | `Design/theme.json` | Theme source of truth (palette + light/dark tokens) |
+| `Design/app-icon.png`, `LFCore/Scripts/gen_icon.swift` | The app icon (a merge of the Current and Incoming lanes) and the script that draws every size of it |
 | `LFCore/Scripts/` | Theme generator, synthetic conflict generator |
 
 ## Build
