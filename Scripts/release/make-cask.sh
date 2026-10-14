@@ -26,8 +26,8 @@ cask "lf-git" do
 
   depends_on macos: :sonoma
 
-  app "LF-Git.app"
-  binary "lfgit"
+  app "stage/LF-Git.app"
+  binary "stage/lfgit"
 
   uninstall quit: "com.alifu.LF-Git"
 
