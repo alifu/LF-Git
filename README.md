@@ -253,6 +253,7 @@ Update and uninstall:
 ```bash
 brew upgrade --cask lf-git
 brew uninstall --cask lf-git          # add --zap to also remove its settings
+brew uninstall lfgit
 ```
 
 Or download `LF-Git.zip` from the [latest release](https://github.com/alifu/LF-Git/releases/latest), unzip it and
@@ -281,6 +282,7 @@ Or, from the Terminal, remove the quarantine flag instead:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/LF-Git.app
+xattr -dr com.apple.quarantine /opt/homebrew/bin/lfgit
 ```
 
 ### Build from source
