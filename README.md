@@ -2,7 +2,7 @@
 
 A native macOS merge tool and Git client for resolving conflicts in **files of any size**, from a Swift source file to an Xcode `project.pbxproj` with millions of lines.
 
-> **Status:** early development (v0.1.1). The C engine, the `lfgit` command line tool, the semantic `.pbxproj` merge and the macOS app, including a Git client, work; the Homebrew formula and release workflow are ready, and the tap is published with the first release.
+> **Status:** early development (v0.1.1). The C engine, the `lfgit` command line tool, the semantic `.pbxproj` merge and the macOS app, including a Git client, work. Releases ship as a prebuilt app (Homebrew cask or zip), so you do not need Xcode to use LF-Git; the formula that builds from source remains for contributors.
 
 ## Goals
 
@@ -10,7 +10,23 @@ A native macOS merge tool and Git client for resolving conflicts in **files of a
 - Stay fast on huge files: memory-mapped, indexed, and streamed by a C11 engine.
 - VSCode-style resolution: **Accept Current / Accept Incoming / Accept Both / Edit**, with keyboard navigation.
 - Smart merge strategies, starting with a semantic `.pbxproj` 3-way merge that auto-resolves most project-file conflicts.
-- Light and dark mode, with a green theme built on the [Atlassian Design color palette](https://atlassian.design/foundations/color/color-palette).
+- Light and dark mode, with a green theme (default; blue, purple, teal or orange can be picked in Settings) built on the [Atlassian Design color palette](https://atlassian.design/foundations/color/color-palette).
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Changes](docs/images/changes.png) | ![Conflicts](docs/images/conflict.png) |
+| **Changes**: staged and unstaged files in folders, a diff with selected lines (blue) ready to stage with Space or the button, *Stage Hunk* on each hunk | **Conflicts**: pick Current / Incoming / Both / Edit… for each conflict, or accept all; select and copy lines |
+| ![Branches](docs/images/branches.png) | ![History](docs/images/history.png) |
+| **Branches**: local and remote groups, `feature/…` folders, search, pull/push badges, double-click to check out | **History**: graph, files of a commit, and the diff with blame on its left |
+| ![Branch menu](docs/images/branch-menu.png) | ![Accent color](docs/images/settings-accent.png) |
+| **Branch menu** with search, new and delete | **Settings → Theme**: choose the accent color (green by default) |
+
+![Minimized ribbon](docs/images/ribbon-minimized.png)
+
+The section ribbon, minimized to one row (double-click the *Repository* tab, or use the arrow at the bottom right). To retake the pictures:
+`xcodebuild test -scheme LF-Git -destination 'platform=macOS' -only-testing:LF-GitUITests/ScreenshotTourUITests`, then `Scripts/docs/export-screenshots.sh`.
 
 ## Layout
 
@@ -24,7 +40,7 @@ A native macOS merge tool and Git client for resolving conflicts in **files of a
 
 ## Build
 
-Requirements: macOS 14+, Xcode 26 (Swift 6).
+Requirements: macOS 14+, Xcode 26 (Swift 6). Only needed to build LF-Git yourself; to use it, see [Install](#install).
 
 ```bash
 # Engine + CLI
@@ -45,16 +61,20 @@ terminal, and the **log panel** (⇧⌘L, or the terminal button in the toolbar)
 
 | Section | What you can do |
 |---|---|
-| **Changes** | Stage/unstage files, **hunks** or **single lines** (select lines in the diff; new files too), discard (lines too), commit, amend, skip hooks, ignore a file (`.gitignore` or local exclude), stash one file, file history. Diff options: ignore whitespace, context size, rename detection |
-| **Branches** | Checkout, new, rename, delete (local and on the remote), merge (default / no-ff / ff-only / squash), rebase onto, reset (soft/mixed/hard), fast-forward from upstream, set/unset upstream, compare with the current branch |
-| **History** | Graph, filter by message/author/file, **reword, edit, squash, fixup, drop, move up/down**, amend an older commit with staged changes, fixup commits and autosquash, revert, **cherry-pick** (copy commits, paste on another branch), reset, detached checkout, branch/tag from a commit, **bisect**, compare any two commits, **blame**, file history. Select lines of a commit's diff to apply them, revert them, or cut them out of the commit |
+| **Changes** | Staged and unstaged files in **collapsible sections and folders** (or a flat list; expand/collapse all). **Space** stages or unstages the selected files, and in the diff the selected lines (or the whole file when none is selected); stage/unstage **hunks** (the button on the `@@` row) or **single lines** (click lines, ⇧/⌘-click for several; new files too), discard (lines too), commit, amend, skip hooks, ignore a file (`.gitignore` or local exclude), stash one file, file history. Diff options: ignore whitespace, context size, rename detection |
+| **Branches** | **Local and remote branches in separate, collapsible groups** (remote names without `origin/`; folders for `feature/…` names; one group per remote when there are several), a **search box**, and a badge on each local branch with the commits to **pull (↓)** and **push (↑)** as of the last fetch. **Double-click** checks a branch out. The commit list, files, diff and blame are always shown: the newest commit of a branch is selected for you. Checkout, new, rename, delete (local and on the remote), merge (default / no-ff / ff-only / squash), rebase onto, reset (soft/mixed/hard), fast-forward from upstream, set/unset upstream, compare with the current branch |
+| **History** | Graph, filter by message/author/file, **reword, edit, squash, fixup, drop, move up/down**, amend an older commit with staged changes, fixup commits and autosquash, revert, **cherry-pick** (copy commits, paste on another branch), reset, detached checkout, branch/tag from a commit, **bisect**, compare any two commits, file history. The **diff has the blame to its left** (who last changed each line, as of that commit; the *Blame* checkbox hides it). Select lines of any diff and **⌘C** copies them as code (without the `+`/`-` column). Select lines of a commit's diff to apply them, revert them, or cut them out of the commit |
 | **Stash** | Stash all / with untracked / staged only / keep index, apply, pop, drop, rename, branch from stash, browse its diff |
 | **Tags** | Lightweight and annotated tags, push, delete (local and remote), checkout, branch from tag |
 | **Remotes** | Add, rename, change URL, remove, fetch, prune, browse remote branches |
 | **Reflog** | Browse, checkout, reset, cherry-pick, branch; **Undo** the last HEAD move (the same button redoes it) |
 | **Worktrees / Submodules** | Add, remove, open; add, update, remove submodules |
 
-**Toolbar:** branch menu, **Fetch**, **Pull** (fast-forward only, merge or rebase), **Push** (and **force push with
+**Confirmations:** merge, rebase, reset, fast-forward, pull-and-merge, pull-and-rebase, cherry-pick, squash, fixup and autosquash first ask, naming what will happen (“Rebase ‘feature’ onto ‘main’?”).
+
+**Ribbon:** the sections sit in a ribbon across the top of the window, like Office 2007: **Changes** and **History** as big buttons, the others as medium ones with counts. Double-click the *Repository* tab or use the arrow to minimize it to one row of small icons; the choice is remembered.
+
+**Toolbar:** branch menu (a popover with a **search box**: type, press Return to switch to the first match), **Fetch**, **Pull** (fast-forward only, merge or rebase), **Push** (and **force push with
 lease**) with ahead/behind counts. Fetch, pull, push and other network commands show a **Cancel** button and stop
 by themselves after 5 minutes; git never prompts for a password. A merge, rebase, cherry-pick or revert that stops
 on conflicts shows a banner with **Continue**, **Skip** and **Abort**: resolve the files in Conflicts, save, and
@@ -83,7 +103,7 @@ palette and run in the repository (`$LFGIT_REPO`, `$LFGIT_BRANCH` are set):
 { "customCommands": [ { "name": "Prune merged branches", "command": "git branch --merged | grep -v '\\*' | xargs git branch -d" } ] }
 ```
 
-**Settings (⌘,)** has four tabs: **Account** (commit author and git server accounts), **Network** (SSL verification), **Environment** (terminal environment) and **Theme** (dark mode):
+**Settings (⌘,)** has four tabs: **Account** (commit author and git server accounts), **Network** (SSL verification), **Environment** (terminal environment) and **Theme** (dark mode and accent color):
 
 | Setting (tab) | What it does |
 |---|---|
@@ -92,6 +112,7 @@ palette and run in the repository (`$LFGIT_REPO`, `$LFGIT_BRANCH` are set):
 | **Git server accounts (token, password or LDAP)** (Account) | For a server that signs in with a **personal access token** (GitHub, GitLab, Bitbucket; enter the token as the password) or a company (LDAP) account, for example an internal GitLab behind a VPN: enter the server, your username and the password or token. The password is handed to git's own credential helper (the macOS keychain; `osxkeychain` is set up if you have no helper), never stored by the app, so fetch, pull and push work without a prompt. Remove an account to forget the password. A server with a private certificate authority may also need *Verify SSL certificates* off |
 | **Terminal environment** (Environment) | On by default. An app started from the Dock does not get what your shell exports, so a token login that works in a terminal can fail in the app (`gh auth` or `git-credential-manager` helpers not found, `GITHUB_TOKEN` or the SSH agent missing). The app asks your login shell once at launch (with an 8 s limit) and gives git your `PATH`, `SSH_AUTH_SOCK`, `GIT_ASKPASS`/`GIT_SSH_COMMAND`, `GH_TOKEN`/`GITHUB_TOKEN`/`GITLAB_TOKEN` and similar token variables, proxy variables and `GCM_*`. Nothing else is taken (never `GIT_DIR` and the like), and the values are never shown or logged. The section shows which `git` is used and which names were imported; **Reload** re-reads the shell |
 | **Dark mode** / **Follow system appearance** (Theme) | Dark or light for the whole app, or follow macOS |
+| **Accent color** (Theme) | Green (default), Blue, Purple, Teal or Orange for buttons, the selected section/row and links; applies at once (the repository window is redrawn, so folders you had opened are closed again) |
 
 If a push, pull or fetch fails because of a login, the error ends with a hint to add a token under Settings. Accounts are added and removed at once. Name, email and SSL are saved with the **Save** button (shown on both Account and Network) (**Revert** reloads the file); appearance applies at once.
 
@@ -101,11 +122,13 @@ are stashed and restored around it.
 `lfgit open` (in a repository) or **File › Open Repository…** shows every conflicted file; pick one
 and resolve it the way VS Code does, but on files of any size.
 
-- Each conflict has **Accept Current · Accept Incoming · Accept Both · Accept Base · Edit · Compare**. **Edit** opens a box to write the result by hand when you need code from both sides (or something new): start from Current, Incoming, Both or Base and change anything; Undo/Redo and a Windows-style file's line endings are kept; a
+- Each conflict has **Accept Current · Accept Incoming · Accept Both · Accept Base · Edit · Compare**, on its header row and, for the selected conflict, in the toolbar (**Current · Incoming · Both · Edit…**). **Edit** (also a **double-click** on any line of the conflict) opens a box to write the result by hand when you need code from both sides (or something new): start from Current, Incoming, Both or Base, type, paste, select and copy, or **Copy** / **Add to Result** a whole side; Undo/Redo and a Windows-style file's line endings are kept; a
   resolved conflict stays visible with the discarded side struck through, and **Undo** is one click away.
+- Lines are selectable (drag, ⇧-click, ⌘A) and **⌘C** copies them. To change lines outside the conflicts, **Open in Editor** opens the file in your default editor and the window follows the edit (the engine edits conflicts, not the rest of a multi-million-line file).
 - The conflict map on the right shows where conflicts are and which are resolved; click to jump.
-- **Re-merge Project** merges `project.pbxproj` object by object; binary files offer *Use Current* /
-  *Use Incoming* with image previews.
+- **Re-merge Project** merges `project.pbxproj` object by object; binary files show both versions
+  (images side by side or with a **Swipe** slider, PDFs you can scroll and select from, other files by icon and size),
+  can be opened in the default app, and take *Use Current* / *Use Incoming* (a side that deleted the file is shown as such).
 - Saving writes the file (open conflicts keep their markers) and, once everything is resolved, stages it.
 - Light and dark mode follow the system, or choose in Settings (⌘,).
 
@@ -126,6 +149,11 @@ and resolve it the way VS Code does, but on files of any size.
 A 2,000,000-line file with 1,000 conflicts opens in about 2.6 s from launch; rows are read from the
 engine only when they scroll into view.
 
+### Code guide
+
+How the code is organised and which file does what (stage / unstage, hunk and line staging, selecting and copying
+diff text, branches, the conflict editor, the engine) is in [docs/](docs/README.md).
+
 ### Redesigning the UI in Xcode
 
 Every screen has a SwiftUI preview (open a view file and show the canvas, ⌥⌘↩). Views that need a repository
@@ -135,9 +163,9 @@ a conflict, so lists, diffs, the graph and the Conflicts section all show real d
 
 | File | Previews |
 |---|---|
-| `Repository/RepositoryView.swift` | whole window (light, dark), section grid, Conflicts sidebar |
+| `Repository/RepositoryView.swift`, `SectionRibbon.swift` | whole window (light, dark), Conflicts sidebar; the Office-2007-style section ribbon |
 | `Repository/RepositoryToolbar.swift`, `RepositoryDialogs.swift` | branch menu, fetch/pull/push, operation banner, bisect banner, message editor |
-| `Changes/ChangesViews.swift` | sidebar, commit box, detail |
+| `Changes/ChangesSidebar.swift`, `ChangesViews.swift` | sidebar, commit box, detail |
 | `Branches/`, `History/`, `Stash/`, `Refs/` | each sidebar and detail (branches, commit list, history detail, stash, tags, reflog, remotes, worktrees, submodules) |
 | `Palette/PaletteActions.swift` | command palette, command log, keyboard help |
 | `Editor/EditorView.swift` | a conflicted file |
@@ -204,6 +232,8 @@ python3 LFCore/Scripts/gen_theme.py          # regenerate + check WCAG AA contra
 python3 LFCore/Scripts/gen_theme.py --check  # CI: fail on drift or low contrast
 ```
 
+**Accent choices** are listed under `accentChoices` in `theme.json`: each one replaces `accent`, `accentHover`, `accentSubtle` and `accentText` with a `[light, dark]` pair of palette colors. The generator writes an extra color set per choice (`lfAccentBlue`, …), checks the same contrast pairs for every choice, and generates `LFAccentChoice`. To add a color, add an entry and rerun the script; the first entry (`green`) is the default and uses the base tokens.
+
 ### Test data
 
 ```bash
@@ -212,23 +242,58 @@ python3 LFCore/Scripts/gen_conflicts.py --lines 1000000 --conflicts 1000 --kind 
 
 ## Install
 
-Homebrew builds LF-Git **from source on your Mac**. Software compiled locally is never quarantined, so Gatekeeper
-has nothing to block (LF-Git is not notarized: there is no Apple Developer account).
+With [Homebrew](https://brew.sh) (no Xcode needed; this installs the prebuilt app and the `lfgit` tool):
 
 ```bash
-brew install alifu/tap/lfgit      # needs Xcode 26 or later; takes a few minutes
+brew install --cask alifu/tap/lf-git
+```
+
+Update and uninstall:
+
+```bash
+brew upgrade --cask lf-git
+brew uninstall --cask lf-git          # add --zap to also remove its settings
+```
+
+Or download `LF-Git.zip` from the [latest release](https://github.com/alifu/LF-Git/releases/latest), unzip it and
+drag `LF-Git.app` into `/Applications`. The zip also holds the `lfgit` command line tool; copy it to a folder in your
+`PATH` (for example `/usr/local/bin`).
+
+Then, in a repository:
+
+```bash
 lfgit --version
 lfgit install                     # use lfgit as `git mergetool` (--global for every repository)
 lfgit open                        # open this repository in the app
+```
+
+### "LF-Git can't be opened" warning
+
+LF-Git isn't notarized by Apple (that needs a paid developer account), so macOS blocks it the first time you open
+it. You only have to allow it once:
+
+1. Open LF-Git. macOS shows a warning that it couldn't verify the app; click **Done**.
+2. Open **System Settings › Privacy & Security** and scroll down to the **Security** section.
+3. Next to "LF-Git was blocked to protect your Mac", click **Open Anyway**, then confirm with your password or
+   Touch ID and click **Open Anyway** again.
+
+Or, from the Terminal, remove the quarantine flag instead:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/LF-Git.app
+```
+
+### Build from source
+
+Only needed to work on LF-Git itself (see [Build](#build)). Homebrew can also build it for you, which needs Xcode 26 or
+later and takes a few minutes; software compiled on your Mac is never quarantined:
+
+```bash
+brew install alifu/tap/lfgit
 ln -sf "$(brew --prefix lfgit)/LF-Git.app" /Applications/LF-Git.app   # optional: Launchpad and Spotlight
 ```
 
-The formula installs `lfgit` into `bin/` and `LF-Git.app` (ad-hoc signed) next to it, where `lfgit open` finds it.
-Upgrade with `brew upgrade lfgit`; remove with `brew uninstall lfgit`.
-
-A prebuilt zip is attached to each GitHub release for people without Xcode. It is ad-hoc signed only, so macOS
-blocks the downloaded copy until you run `xattr -dr com.apple.quarantine LF-Git.app lfgit` once. Maintainers: see
-[RELEASING.md](RELEASING.md).
+Maintainers: see [RELEASING.md](RELEASING.md).
 
 ## License
 

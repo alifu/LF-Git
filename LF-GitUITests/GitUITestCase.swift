@@ -20,9 +20,10 @@ class GitUITestCase: XCTestCase {
 
     // MARK: - Helpers
 
-    func launch(appearance: String) -> XCUIApplication {
+    /// `accent` is passed as a launch argument, which beats whatever an earlier run or the user stored.
+    func launch(appearance: String, accent: String = "green") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--repo", repository.path, "-appearance", appearance]
+        app.launchArguments = ["--repo", repository.path, "-appearance", appearance, "-accentColor", accent]
         app.launch()
         return app
     }
