@@ -2,9 +2,9 @@ name: lfgit
 
 on:
   push:
-    paths: ["Formula/lfgit.rb", ".github/workflows/lfgit.yml"]
+    paths: ["Formula/lfgit.rb", "Casks/lf-git.rb", ".github/workflows/lfgit.yml"]
   pull_request:
-    paths: ["Formula/lfgit.rb", ".github/workflows/lfgit.yml"]
+    paths: ["Formula/lfgit.rb", "Casks/lf-git.rb", ".github/workflows/lfgit.yml"]
 
 jobs:
   formula:
@@ -23,3 +23,20 @@ jobs:
         run: brew test local/lfgit-ci/lfgit
       - name: brew audit
         run: brew audit --strict --formula local/lfgit-ci/lfgit
+
+  cask:
+    name: audit the cask
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use this checkout as the tap
+        run: |
+          brew tap-new --no-git local/lfgit-cask-ci
+          mkdir -p "$(brew --repository local/lfgit-cask-ci)/Casks"
+          cp Casks/lf-git.rb "$(brew --repository local/lfgit-cask-ci)/Casks/"
+      - name: brew audit
+        run: brew audit --strict --cask local/lfgit-cask-ci/lf-git
+      - name: Install the prebuilt app
+        run: brew install --cask local/lfgit-cask-ci/lf-git
+      - name: lfgit runs
+        run: lfgit --version

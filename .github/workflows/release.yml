@@ -32,46 +32,70 @@ jobs:
 
       - name: Pack the prebuilt zip
         run: |
-          version="${GITHUB_REF_NAME#v}"
           mkdir -p dist/stage
           cp -R build/Build/Products/Release/LF-Git.app dist/stage/
           cp LFCore/.build/apple/Products/Release/lfgit dist/stage/
           cp LICENSE dist/stage/
           cat > dist/stage/README.txt <<'TXT'
-          LF-Git is ad-hoc signed, not notarized (no Apple Developer account), so macOS blocks a downloaded copy.
-          Run once, then open it normally:
-            xattr -dr com.apple.quarantine LF-Git.app lfgit
-          Building from source with Homebrew avoids this: brew install alifu/tap/lfgit
+          LF-Git is not notarized by Apple (that needs a paid developer account), so macOS blocks it the first time.
+          Move LF-Git.app to /Applications, then allow it once:
+            System Settings > Privacy & Security > "Open Anyway", or run
+            xattr -dr com.apple.quarantine /Applications/LF-Git.app lfgit
+          More: https://github.com/alifu/LF-Git#install
           TXT
-          ditto -c -k --keepParent dist/stage "dist/LF-Git-${version}-macos.zip"
-          shasum -a 256 "dist/LF-Git-${version}-macos.zip" > "dist/LF-Git-${version}-macos.zip.sha256"
+          # A fixed name, so the link .../releases/latest/download/LF-Git.zip always works.
+          ditto -c -k --keepParent dist/stage dist/LF-Git.zip
+          (cd dist && shasum -a 256 LF-Git.zip > LF-Git.zip.sha256)
 
-      - name: Source archive checksum for the formula
-        id: source
+      - name: Homebrew cask and formula values
+        id: brew
         run: |
           version="${GITHUB_REF_NAME#v}"
+          zip_sha="$(cut -d ' ' -f 1 dist/LF-Git.zip.sha256)"
+          sh Scripts/release/make-cask.sh "$version" "$zip_sha" > dist/lf-git.rb
           url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
           # Download first: a failed download must stop the job, not turn into the checksum of nothing.
           curl -fsSL --retry 5 --retry-delay 5 -o source.tar.gz "$url"
           test -s source.tar.gz
-          sha="$(shasum -a 256 source.tar.gz | cut -d ' ' -f 1)"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          source_sha="$(shasum -a 256 source.tar.gz | cut -d ' ' -f 1)"
+          echo "zip_sha=$zip_sha" >> "$GITHUB_OUTPUT"
           {
-            echo "Homebrew (builds from source on your Mac, no Gatekeeper warning):"
+            echo "Install the prebuilt app and the \`lfgit\` tool (no Xcode needed):"
             echo
             echo '```'
-            echo "brew install alifu/tap/lfgit"
+            echo "brew install --cask alifu/tap/lf-git"
             echo '```'
             echo
-            echo "Formula values: \`url \"$url\"\`, \`sha256 \"$sha\"\`"
+            echo "Or download \`LF-Git.zip\`, unzip it and drag \`LF-Git.app\` into \`/Applications\`."
+            echo "LF-Git is not notarized: allow it once under System Settings > Privacy & Security > Open Anyway,"
+            echo "or run \`xattr -dr com.apple.quarantine /Applications/LF-Git.app\`."
             echo
-            echo "The zip is ad-hoc signed and not notarized: run \`xattr -dr com.apple.quarantine LF-Git.app lfgit\` once."
+            echo "Build from source instead (needs Xcode 26): \`brew install alifu/tap/lfgit\`."
+            echo
+            echo "SHA-256 of \`LF-Git.zip\`: \`$zip_sha\`"
+            echo "Formula values: \`url \"$url\"\`, \`sha256 \"$source_sha\"\`"
           } > dist/notes.md
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/LF-Git-*-macos.zip dist/LF-Git-*-macos.zip.sha256 \
+          gh release create "$GITHUB_REF_NAME" dist/LF-Git.zip dist/LF-Git.zip.sha256 dist/lf-git.rb \
             --title "LF-Git ${GITHUB_REF_NAME#v}" --notes-file dist/notes.md
+
+      # Optional: with a TAP_TOKEN secret (a token that can push to alifu/homebrew-tap) the cask is updated by itself.
+      # Without it, copy dist/lf-git.rb (attached to the release) to Casks/lf-git.rb in the tap.
+      - name: Update the Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        if: ${{ env.TAP_TOKEN != '' }}
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/alifu/homebrew-tap.git" tap
+          mkdir -p tap/Casks
+          cp dist/lf-git.rb tap/Casks/lf-git.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/lf-git.rb
+          git commit -m "lf-git ${GITHUB_REF_NAME#v}" || exit 0
+          git push
