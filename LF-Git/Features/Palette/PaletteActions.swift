@@ -25,8 +25,12 @@ extension RepositoryModel {
         }
         git("fetch", "Fetch", symbol: "arrow.triangle.2.circlepath", hint: "⌥⌘F", enabled: idle) { try await self.fetch() }
         git("pull", "Pull (fast-forward only)", symbol: "arrow.down", hint: "⌥⌘L", enabled: idle) { try await self.pull(.fastForwardOnly) }
-        git("pull-merge", "Pull and Merge", symbol: "arrow.down", enabled: idle) { try await self.pull(.merge) }
-        git("pull-rebase", "Pull and Rebase", symbol: "arrow.down", enabled: idle) { try await self.pull(.rebase) }
+        actions.append(PaletteAction(id: "pull-merge", title: "Pull and Merge…", symbol: "arrow.down", isEnabled: idle) { [self] in
+            requestPull(.merge, app: app)
+        })
+        actions.append(PaletteAction(id: "pull-rebase", title: "Pull and Rebase…", symbol: "arrow.down", isEnabled: idle) { [self] in
+            requestPull(.rebase, app: app)
+        })
         git("push", "Push", symbol: "arrow.up", hint: "⌥⌘P", enabled: idle) { try await self.push() }
         actions.append(PaletteAction(id: "force-push", title: "Force Push (with lease)…", symbol: "arrow.up.circle", isEnabled: idle) { [self] in
             confirm(PendingConfirmation(title: "Force push \(status.branch ?? "this branch")?",

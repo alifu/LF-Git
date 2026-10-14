@@ -24,7 +24,7 @@ final class ConflictRowView: NSTableRowView {
             bounds.fill()
         }
         if isSelected {
-            NSColor.theme(.accentSubtle).withAlphaComponent(0.7).setFill()
+            NSColor.theme(.lineSelection).withAlphaComponent(0.6).setFill()
             bounds.fill()
         }
         if focused {

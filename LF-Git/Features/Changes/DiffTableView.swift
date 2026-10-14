@@ -15,18 +15,24 @@ struct DiffTableView: NSViewRepresentable {
     var hunkAction: HunkAction?
     /// The diff lines (1-based) the user selected, when lines can be picked (staging single lines).
     var selection: Binding<Set<Int>>?
+    /// Who last changed each line of the file, by new-side line number; drawn to the left of the numbers.
+    var blame: [Int: GitBlameLine] = [:]
+    var showsBlame = true
+    /// Space pressed in the table: stage (or unstage) what is selected.
+    var onSpace: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(diff: diff)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let table = NSTableView()
+        let table = DiffNSTableView()
         table.headerView = nil
         table.rowHeight = EditorMetrics.rowHeight
         table.intercellSpacing = .zero
-        table.selectionHighlightStyle = selection == nil ? .none : .regular
-        table.allowsMultipleSelection = selection != nil
+        // Always selectable: even a read-only diff lets the user pick lines and copy them (⌘C).
+        table.selectionHighlightStyle = .regular
+        table.allowsMultipleSelection = true
         table.backgroundColor = .theme(.background)
         table.style = .plain
         table.columnAutoresizingStyle = .noColumnAutoresizing
@@ -44,13 +50,16 @@ struct DiffTableView: NSViewRepresentable {
         scroll.autohidesScrollers = true
         scroll.backgroundColor = .theme(.background)
         context.coordinator.table = table
+        table.onCopy = { [weak coordinator = context.coordinator] rows in coordinator?.codeText(ofRows: rows) ?? "" }
         return scroll
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.hunkAction = hunkAction
         context.coordinator.selection = selection
+        (context.coordinator.table as? DiffNSTableView)?.onSpace = onSpace
         context.coordinator.show(diff)
+        context.coordinator.setBlame(showsBlame ? blame : [:])
     }
 
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
@@ -60,6 +69,7 @@ struct DiffTableView: NSViewRepresentable {
         var selection: Binding<Set<Int>>?
         private var hunkAtHeader: [Int: DiffHunk] = [:]
         private var gutterWidth: CGFloat = 40
+        private var blame: [Int: GitBlameLine] = [:]
 
         init(diff: GitDiffFile) {
             self.diff = diff
@@ -84,6 +94,36 @@ struct DiffTableView: NSViewRepresentable {
             table?.deselectAll(nil)
             table?.reloadData()
             table?.scroll(.zero)
+        }
+
+        func setBlame(_ newBlame: [Int: GitBlameLine]) {
+            // The count is enough: the model clears the blame whenever another file is chosen.
+            guard newBlame.count != blame.count, let table else { return }
+            blame = newBlame
+            table.reloadData()
+        }
+
+        /// "a1b2c3d Author", only on the first line of a run from the same commit, like a blame gutter in an editor.
+        private func blameText(forNewLine new: Int, diffLine line: Int) -> (text: String, tip: String)? {
+            guard !blame.isEmpty else { return nil }
+            guard new > 0, let entry = blame[new] else { return ("", "") }
+            if line > 1 {
+                let previous = diff.numbers(ofLine: line - 1).new
+                if previous > 0, previous == new - 1, blame[previous]?.hash == entry.hash { return ("", "") }
+            }
+            let who = entry.isUncommitted ? "not committed" : "\(entry.shortHash) \(entry.author)"
+            return (who, "\(entry.summary)\n\(entry.author), \(entry.date.formatted(date: .abbreviated, time: .omitted))")
+        }
+
+        /// The selected lines as code: the `+`/`-`/space column is dropped, and diff headers are left out unless
+        /// nothing else is selected.
+        func codeText(ofRows rows: IndexSet) -> String {
+            let lines = rows.map { $0 + 1 }
+            let code = lines.filter { !isFileHeader($0) && hunkAtHeader[$0] == nil }
+            guard !code.isEmpty else { return lines.map { diff.text(ofLine: $0) }.joined(separator: "\n") }
+            // "\ No newline at end of file" is a note about the file, not code.
+            return code.map { diff.text(ofLine: $0) }.filter { !$0.hasPrefix("\\") }.map { String($0.dropFirst()) }
+            .joined(separator: "\n")
         }
 
         func tableViewSelectionDidChange(_ notification: Notification) {
@@ -139,7 +179,9 @@ struct DiffTableView: NSViewRepresentable {
                 ?? DiffLineCell(frame: .zero)
             let text = diff.text(ofLine: line)
             let numbers = diff.numbers(ofLine: line)
-            cell.configure(old: numbers.old, new: numbers.new, gutter: gutterWidth, text: styled(text, line: line))
+            let blameInfo = blameText(forNewLine: numbers.new, diffLine: line)
+            cell.configure(old: numbers.old, new: numbers.new, gutter: gutterWidth, text: styled(text, line: line),
+                           blame: blameInfo?.text, blameTip: blameInfo?.tip)
             return cell
         }
 
@@ -147,6 +189,26 @@ struct DiffTableView: NSViewRepresentable {
             let isMeta = isFileHeader(line) || text.hasPrefix("\\")
             let color: NSColor = isMeta ? .theme(.textSubtle) : .theme(.text)
             return NSAttributedString(string: text, attributes: [.font: EditorMetrics.codeFont, .foregroundColor: color])
+        }
+    }
+}
+
+/// A table that reports the space bar, which stages or unstages the selected lines.
+final class DiffNSTableView: NSTableView {
+    var onSpace: (() -> Void)?
+    var onCopy: ((IndexSet) -> String)?
+
+    @objc func copy(_ sender: Any?) {
+        guard let onCopy, !selectedRowIndexes.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(onCopy(selectedRowIndexes), forType: .string)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == " ", event.modifierFlags.intersection([.command, .control, .option]).isEmpty, let onSpace {
+            onSpace()
+        } else {
+            super.keyDown(with: event)
         }
     }
 }

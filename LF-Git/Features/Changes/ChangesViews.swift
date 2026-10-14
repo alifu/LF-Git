@@ -2,198 +2,7 @@ import AppKit
 import LFKit
 import SwiftUI
 
-/// Staged and unstaged files, with the commit box underneath.
-struct ChangesSidebar: View {
-    let repository: RepositoryModel
-    let app: AppModel
-    @State private var discarding: [GitChange] = []
-
-    private var changes: ChangesModel { repository.changes }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            List(selection: Binding(get: { changes.selection }, set: { selection in Task { await changes.select(selection) } })) {
-                if repository.status.isClean {
-                    ContentUnavailableView("No changes", systemImage: "checkmark.circle",
-                                           description: Text("The working tree matches the last commit."))
-                        .listRowSeparator(.hidden)
-                }
-                if !repository.status.staged.isEmpty {
-                    Section {
-                        ForEach(repository.status.staged) { change in
-                            ChangeRow(change: change, staged: true, app: app, repository: repository, discarding: $discarding)
-                                .tag(ChangeSelection(path: change.path, staged: true))
-                        }
-                    } header: {
-                        sectionHeader("Staged", count: repository.status.staged.count, action: "Unstage All") {
-                            run { try await changes.unstageAll() }
-                        }
-                    }
-                }
-                if !repository.status.unstaged.isEmpty {
-                    Section {
-                        ForEach(repository.status.unstaged) { change in
-                            ChangeRow(change: change, staged: false, app: app, repository: repository, discarding: $discarding)
-                                .tag(ChangeSelection(path: change.path, staged: false))
-                        }
-                    } header: {
-                        sectionHeader("Changes", count: repository.status.unstaged.count, action: "Stage All") {
-                            run { try await changes.stageAll() }
-                        }
-                    }
-                }
-            }
-            .listStyle(.sidebar)
-            .accessibilityIdentifier("changes-list")
-            Divider()
-            CommitBox(repository: repository, app: app)
-        }
-        .confirmationDialog(
-            discarding.count == 1 ? "Discard changes to \(discarding[0].path)?" : "Discard \(discarding.count) changes?",
-            isPresented: Binding(get: { !discarding.isEmpty }, set: { if !$0 { discarding = [] } }),
-            titleVisibility: .visible
-        ) {
-            Button("Discard Changes", role: .destructive) {
-                let targets = discarding
-                run { try await changes.discard(targets) }
-            }
-        } message: {
-            Text("This cannot be undone. Untracked files are deleted.")
-        }
-    }
-
-    private func sectionHeader(_ title: String, count: Int, action: String, perform: @escaping () -> Void) -> some View {
-        HStack {
-            Text("\(title) · \(count)")
-            Spacer()
-            Button(action, action: perform)
-                .buttonStyle(.link)
-                .font(.caption)
-                .accessibilityIdentifier(action.lowercased().replacingOccurrences(of: " ", with: "-"))
-        }
-    }
-
-    private func run(_ work: @escaping () async throws -> Void) {
-        Task {
-            do { try await work() } catch { app.report(error) }
-        }
-    }
-}
-
-private struct ChangeRow: View {
-    let change: GitChange
-    let staged: Bool
-    let app: AppModel
-    let repository: RepositoryModel
-    @Binding var discarding: [GitChange]
-
-    private var status: GitFileStatus { staged ? change.index : change.worktree }
-    private var name: String { (change.path as NSString).lastPathComponent }
-    private var folder: String { (change.path as NSString).deletingLastPathComponent }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(status.symbol)
-                .font(.caption.monospaced().weight(.bold))
-                .frame(width: 16)
-                .foregroundStyle(.theme(color))
-                .accessibilityLabel(label)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(name).lineLimit(1)
-                if !folder.isEmpty || change.originalPath != nil {
-                    Text(change.originalPath.map { "from \($0)" } ?? folder)
-                        .font(.caption)
-                        .foregroundStyle(.theme(.textSubtle))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-            }
-            Spacer(minLength: 4)
-            Button {
-                Task {
-                    do {
-                        if staged { try await repository.changes.unstage(change) } else { try await repository.changes.stage([change.path]) }
-                    } catch { app.report(error) }
-                }
-            } label: {
-                Image(systemName: staged ? "minus.circle" : "plus.circle")
-            }
-            .buttonStyle(.borderless)
-            .help(staged ? "Unstage \(name)" : "Stage \(name)")
-            .accessibilityIdentifier("\(staged ? "unstage" : "stage")-\(change.path)")
-        }
-        .padding(.vertical, 1)
-        .contextMenu {
-            Button(staged ? "Unstage" : "Stage") {
-                app.run { staged ? try await repository.changes.unstage(change) : try await repository.changes.stage([change.path]) }
-            }
-            if !staged {
-                Button("Discard Changes…", role: .destructive) { discarding = [change] }
-            }
-            Divider()
-            Menu("Ignore") {
-                Button("Add to .gitignore") { ignore(.gitignore) }
-                Button("Add to Local Exclude (.git/info/exclude)") { ignore(.localExclude) }
-            }
-            Menu("Stash This File") {
-                Button("Stash…") { stash(includeUntracked: change.kind == .untracked) }
-            }
-            Button("File History") {
-                repository.section = .history
-                repository.history.filter = GitLogFilter(path: change.path, followRenames: true)
-                Task { await repository.history.reload() }
-            }
-            Divider()
-            Button("Open File") { NSWorkspace.shared.open(repository.root.appendingPathComponent(change.path)) }
-                .disabled(change.worktree == .deleted)
-            Button("Copy Path") { Clipboard.copy(change.path) }
-            Button("Show in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([repository.root.appendingPathComponent(change.path)])
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("change-\(staged ? "staged" : "unstaged")-\(change.path)")
-    }
-
-    private func ignore(_ scope: IgnoreScope) {
-        let path = change.path
-        app.run { try await repository.perform("Ignoring…") { client, _ in try client.ignore([path], scope: scope) } }
-    }
-
-    private func stash(includeUntracked: Bool) {
-        let path = change.path
-        repository.ask(PendingPrompt(title: "Stash \(name)", message: "A name helps you find it later (optional).",
-                                     placeholder: "Message", confirmTitle: "Stash") { message in
-            app.run {
-                try await repository.perform("Stashing…") { client, _ in
-                    try client.stashPush(message: message, includeUntracked: includeUntracked, paths: [path])
-                }
-            }
-        })
-    }
-
-    private var color: LFThemeToken {
-        switch status {
-        case .added, .untracked: .accentText
-        case .deleted: .danger
-        case .renamed, .copied: .info
-        default: .warning
-        }
-    }
-
-    private var label: String {
-        switch status {
-        case .added: "added"
-        case .untracked: "untracked"
-        case .deleted: "deleted"
-        case .renamed: "renamed"
-        case .copied: "copied"
-        case .modified: "modified"
-        default: "changed"
-        }
-    }
-}
-
+/// The commit message, amend and commit.
 struct CommitBox: View {
     let repository: RepositoryModel
     let app: AppModel
@@ -317,11 +126,27 @@ struct ChangesDetailView: View {
     private func content(selection: ChangeSelection, change: GitChange) -> some View {
         if let diff = changes.diff {
             DiffContentView(diff: diff, hunkAction: hunkAction(selection: selection, change: change),
-                            lineSelection: canPickLines(selection: selection, change: change) ? $lineSelection : nil)
+                            lineSelection: canPickLines(selection: selection, change: change) ? $lineSelection : nil,
+                            onSpace: { stageSelectedLines(selection: selection, change: change, diff: diff) })
         } else if let error = changes.diffError {
             ContentUnavailableView("Cannot show the diff", systemImage: "exclamationmark.triangle", description: Text(error))
         } else {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// Space in the diff: stage (or unstage) the selected lines, or the whole file when no line is selected.
+    private func stageSelectedLines(selection: ChangeSelection, change: GitChange, diff: GitDiffFile) {
+        let lines = diff.changedLines(in: lineSelection)
+        guard !lines.isEmpty, canPickLines(selection: selection, change: change), let hunk = diff.singleHunk(containing: lines) else {
+            app.run {
+                if selection.staged { try await changes.unstage(change) } else { try await changes.stage([change.path]) }
+            }
+            return
+        }
+        app.run {
+            try await changes.applyLines(lines, in: hunk, of: diff)
+            lineSelection = []
         }
     }
 
@@ -350,6 +175,10 @@ struct DiffContentView: View {
     let diff: GitDiffFile
     var hunkAction: HunkAction?
     var lineSelection: Binding<Set<Int>>?
+    /// Who last changed each line (new-side line numbers); shown to the left of the diff while `showsBlame` is on.
+    var blame: [Int: GitBlameLine] = [:]
+    var showsBlame = true
+    var onSpace: (() -> Void)?
 
     var body: some View {
         if diff.index.isBinary {
@@ -360,18 +189,11 @@ struct DiffContentView: View {
         } else if diff.lineCount == 0 {
             ContentUnavailableView("No differences", systemImage: "equal.circle")
         } else {
-            DiffTableView(diff: diff, hunkAction: hunkAction, selection: lineSelection)
+            DiffTableView(diff: diff, hunkAction: hunkAction, selection: lineSelection, blame: blame, showsBlame: showsBlame,
+                          onSpace: onSpace)
         }
     }
 }
-
-#if DEBUG
-#Preview("Changes sidebar") {
-    PreviewRepository(width: 340, height: 600) { repository, app in
-        ChangesSidebar(repository: repository, app: app)
-    }
-}
-#endif
 
 #if DEBUG
 #Preview("Commit box") {

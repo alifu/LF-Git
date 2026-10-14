@@ -39,8 +39,8 @@ struct CommitContextMenu: View {
             Button("Copy Subject") { Clipboard.copy(commit.subject) }
         }
         if !repository.copiedCommits.isEmpty {
-            Button("Paste \(repository.copiedCommits.count) Copied Commit\(repository.copiedCommits.count == 1 ? "" : "s") Here (Cherry-Pick)") {
-                app.run { try await repository.pasteCopiedCommits() }
+            Button("Paste \(repository.copiedCommits.count) Copied Commit\(repository.copiedCommits.count == 1 ? "" : "s") Here (Cherry-Pick)…") {
+                repository.requestPaste(app: app)
             }
             Button("Clear Copied Commits") { repository.clearCopiedCommits() }
         }
@@ -48,9 +48,9 @@ struct CommitContextMenu: View {
             Section("Rewrite History") {
                 Button("Reword…") { reword() }
                 Button("Edit (stop here)") { act("Starting edit…") { try $0.editCommit(commit) } }
-                Button("Squash into Previous") { act("Squashing…") { try $0.squashCommit(commit) } }
+                Button("Squash into Previous…") { rewrite("Squash", commit, "is combined with the commit before it, keeping both messages") { try $0.squashCommit(commit) } }
                     .disabled(isLast)
-                Button("Fixup into Previous") { act("Fixing up…") { try $0.fixupCommit(commit) } }
+                Button("Fixup into Previous…") { rewrite("Fixup", commit, "is folded into the commit before it, dropping its message") { try $0.fixupCommit(commit) } }
                     .disabled(isLast)
                 Button("Drop…", role: .destructive) { drop() }
                 Button("Move Up") { act("Moving…") { try $0.moveCommitUp(commit) } }
@@ -61,14 +61,14 @@ struct CommitContextMenu: View {
                     .disabled(repository.status.staged.isEmpty)
                 Button("Create Fixup Commit from Staged Changes") { act("Creating fixup…") { try $0.createFixupCommit(for: commit) } }
                     .disabled(repository.status.staged.isEmpty)
-                Button("Squash All Fixup Commits Above") { act("Squashing fixups…") { try $0.autosquash(above: commit) } }
+                Button("Squash All Fixup Commits Above…") { rewrite("Autosquash", commit, "and every fixup! or squash! commit above it are rebased and combined") { try $0.autosquash(above: commit) } }
             }
         }
         Section("Apply") {
             Button("Revert…") { revert() }
             Menu("Reset Current Branch to Here") {
                 ForEach(ResetMode.allCases, id: \.self) { mode in
-                    Button(mode.rawValue.capitalized + (mode == .hard ? "…" : "")) { reset(mode) }
+                    Button(mode.rawValue.capitalized + "…") { reset(mode) }
                 }
             }
             Button("Checkout (Detached HEAD)") { act("Checking out…") { try $0.checkoutDetached(commit) } }
@@ -124,17 +124,27 @@ struct CommitContextMenu: View {
         ) { act("Reverting…") { try $0.revert(commit) } })
     }
 
+    /// Asks before a rebase-style rewrite of history, saying what will be combined.
+    private func rewrite(_ verb: String, _ commit: GitCommit, _ effect: String, _ work: @escaping @Sendable (GitClient) throws -> Void) {
+        repository.confirm(PendingConfirmation(
+            title: "\(verb) “\(commit.subject)”?",
+            message: "\(commit.shortHash) \(effect). The commits after it get new hashes (a rebase).",
+            confirmTitle: verb, isDestructive: false
+        ) { act("\(verb)…") { try work($0) } })
+    }
+
     private func reset(_ mode: ResetMode) {
         let commit = commit
-        let run = { act("Resetting…") { try $0.reset(to: commit.hash, mode: mode) } }
-        if mode == .hard {
-            repository.confirm(PendingConfirmation(
-                title: "Hard reset to \(commit.shortHash)?",
-                message: "Uncommitted changes and the commits after it are lost from this branch (the reflog keeps them for a while).",
-                confirmTitle: "Hard Reset", action: run))
-        } else {
-            run()
+        let branch = repository.status.branch ?? "HEAD"
+        let detail: String = switch mode {
+        case .soft: "‘\(branch)’ moves to \(commit.shortHash); the later changes stay staged."
+        case .mixed: "‘\(branch)’ moves to \(commit.shortHash); the later changes stay in your files, unstaged."
+        case .hard: "Uncommitted changes and the commits after it are lost from this branch (the reflog keeps them for a while)."
         }
+        repository.confirm(PendingConfirmation(
+            title: "\(mode.rawValue.capitalized) reset ‘\(branch)’ to \(commit.shortHash)?", message: detail,
+            confirmTitle: "\(mode.rawValue.capitalized) Reset", isDestructive: mode == .hard
+        ) { act("Resetting…") { try $0.reset(to: commit.hash, mode: mode) } })
     }
 
     private func newBranch() {

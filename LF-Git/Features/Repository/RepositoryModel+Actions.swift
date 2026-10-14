@@ -11,6 +11,37 @@ extension RepositoryModel {
         self.confirmation = confirmation
     }
 
+    // MARK: Asking first
+
+    /// Pulls. Merge and rebase change the branch in ways a fast-forward does not, so they say what will happen and wait for a yes.
+    func requestPull(_ strategy: PullStrategy, app: AppModel) {
+        let branch = status.branch ?? "the current branch"
+        let upstream = status.upstream ?? "its upstream"
+        switch strategy {
+        case .fastForwardOnly:
+            app.run { try await self.pull(.fastForwardOnly) }
+        case .merge:
+            confirm(PendingConfirmation(title: "Pull and merge ‘\(upstream)’ into ‘\(branch)’?",
+                                        message: "Fetches \(upstream) and merges it into \(branch); a merge commit is created when the branches diverged.",
+                                        confirmTitle: "Pull and Merge", isDestructive: false) { app.run { try await self.pull(.merge) } })
+        case .rebase:
+            confirm(PendingConfirmation(title: "Pull and rebase ‘\(branch)’ onto ‘\(upstream)’?",
+                                        message: "Fetches \(upstream) and replays the commits of \(branch) on top of it, which rewrites those commits.",
+                                        confirmTitle: "Pull and Rebase", isDestructive: false) { app.run { try await self.pull(.rebase) } })
+        }
+    }
+
+    /// Cherry-picks the copied commits after saying which and where.
+    func requestPaste(app: AppModel) {
+        let count = copiedCommits.count
+        guard count > 0 else { return }
+        let branch = status.branch ?? "the current HEAD"
+        let list = copiedCommits.prefix(5).map { "• \($0.shortHash) \($0.subject)" }.joined(separator: "\n")
+        confirm(PendingConfirmation(title: "Cherry-pick \(count) commit\(count == 1 ? "" : "s") onto ‘\(branch)’?",
+                                    message: list + (count > 5 ? "\n… and \(count - 5) more" : ""),
+                                    confirmTitle: "Cherry-Pick", isDestructive: false) { app.run { try await self.pasteCopiedCommits() } })
+    }
+
     // MARK: Cherry-pick clipboard
 
     func copyCommits(_ commits: [GitCommit]) {

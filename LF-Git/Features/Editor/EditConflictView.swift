@@ -30,9 +30,9 @@ struct EditConflictView: View {
             Divider()
             HStack(spacing: 1) {
                 reference(sides.currentLabel.isEmpty ? "Current" : "Current (\(sides.currentLabel))", sides.current,
-                          header: .conflictCurrentHeader, body: .conflictCurrentBody)
+                          header: .conflictCurrentHeader, body: .conflictCurrentBody, identifier: "current")
                 reference(sides.incomingLabel.isEmpty ? "Incoming" : "Incoming (\(sides.incomingLabel))", sides.incoming,
-                          header: .conflictIncomingHeader, body: .conflictIncomingBody)
+                          header: .conflictIncomingHeader, body: .conflictIncomingBody, identifier: "incoming")
             }
             .frame(height: 130)
             .background(.theme(.border))
@@ -40,7 +40,7 @@ struct EditConflictView: View {
             CodeTextEditor(text: $text)
             Divider()
             HStack {
-                Text("This text replaces the whole conflict when you apply it.")
+                Text("Type, paste or select here; this text replaces the whole conflict when you apply it. ⌘Z undoes typing.")
                     .font(.caption).foregroundStyle(.theme(.textSubtle))
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -59,10 +59,21 @@ struct EditConflictView: View {
         .background(.theme(.background))
     }
 
-    private func reference(_ title: String, _ text: String, header: LFThemeToken, body: LFThemeToken) -> some View {
+    /// One side of the conflict: select any of it and copy, or add all of it to the result.
+    private func reference(_ title: String, _ text: String, header: LFThemeToken, body: LFThemeToken, identifier: String) -> some View {
         VStack(spacing: 0) {
-            Text(title).font(.caption.weight(.semibold)).lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(6).background(.theme(header))
+            HStack(spacing: 6) {
+                Text(title).font(.caption.weight(.semibold)).lineLimit(1)
+                Spacer()
+                Button("Copy") { Clipboard.copy(text) }
+                    .accessibilityIdentifier("edit-copy-\(identifier)")
+                Button("Add to Result") { self.text += (self.text.isEmpty || self.text.hasSuffix("\n") ? "" : "\n") + text }
+                    .accessibilityIdentifier("edit-add-\(identifier)")
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .disabled(text.isEmpty)
+            .frame(maxWidth: .infinity, alignment: .leading).padding(6).background(.theme(header))
             ScrollView([.vertical, .horizontal]) {
                 Text(text.isEmpty ? "(empty)" : text)
                     .font(.system(size: 11, design: .monospaced))

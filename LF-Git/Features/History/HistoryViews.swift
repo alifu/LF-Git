@@ -195,6 +195,7 @@ struct HistoryDetailView: View {
     let app: AppModel
     let model: HistoryModel
     @State private var lineSelection: Set<Int> = []
+    @AppStorage("diff.showsBlame") private var showsBlame = true
 
     var body: some View {
         Group {
@@ -203,7 +204,8 @@ struct HistoryDetailView: View {
             } else if let comparison = model.comparison {
                 detail { comparisonHeader(comparison) }
             } else {
-                ContentUnavailableView("Select a commit", systemImage: "clock.arrow.circlepath")
+                // The same layout as with a commit, just empty, so the view never collapses to half a window.
+                detail { emptyHeader }
             }
         }
         .background(.theme(.background))
@@ -225,6 +227,16 @@ struct HistoryDetailView: View {
     private var canRewrite: Bool {
         if case .log(let revision) = model.source { return revision == nil && repository.operation == nil }
         return false
+    }
+
+    private var emptyHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("No commit selected").font(.headline).foregroundStyle(.theme(.textSubtle))
+            Text("Pick a commit to see its files, diff and blame.").font(.callout).foregroundStyle(.theme(.textSubtle))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(.theme(.surfaceRaised))
     }
 
     private func comparisonHeader(_ comparison: HistoryModel.Comparison) -> some View {
@@ -288,40 +300,40 @@ struct HistoryDetailView: View {
         Task { await repository.history.reload() }
     }
 
+    /// The diff of the selected file with who last changed each line to its left.
     @ViewBuilder
     private var content: some View {
         VStack(spacing: 0) {
-            if model.selectedFile != nil, model.selectedCommit != nil {
+            if model.selectedFile != nil, model.selectedCommit != nil || model.comparison != nil {
                 HStack {
-                    Picker("View", selection: Binding(get: { model.blame != nil }, set: { on in Task { await model.showBlame(on) } })) {
-                        Text("Diff").tag(false)
-                        Text("Blame").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
-                    .accessibilityIdentifier("diff-blame-picker")
+                    Text(model.selectedFile ?? "").font(.callout).lineLimit(1).truncationMode(.head)
                     Spacer()
+                    Toggle("Blame", isOn: $showsBlame)
+                        .toggleStyle(.checkbox)
+                        .help("Show who last changed each line, to the left of the diff")
+                        .accessibilityIdentifier("blame-toggle")
+                        .disabled(model.blame == nil)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 Divider()
             }
-            if let blame = model.blame {
-                BlameView(lines: blame)
-            } else if let diff = model.diff {
+            if let diff = model.diff {
                 if let commit = model.selectedCommit, model.comparison == nil, diff.isDisplayable, !diff.index.isBinary {
                     CommitLineBar(repository: repository, app: app, diff: diff, commit: commit, selection: $lineSelection,
                                   canRewrite: canRewrite)
                     Divider()
-                    DiffContentView(diff: diff, lineSelection: $lineSelection)
+                    DiffContentView(diff: diff, lineSelection: $lineSelection, blame: model.blameByLine, showsBlame: showsBlame)
                 } else {
-                    DiffContentView(diff: diff)
+                    DiffContentView(diff: diff, blame: model.blameByLine, showsBlame: showsBlame)
                 }
             } else if let error = model.detailError {
                 ContentUnavailableView("Cannot show this", systemImage: "exclamationmark.triangle", description: Text(error))
+            } else if model.selectedFile == nil {
+                ContentUnavailableView("No diff to show", systemImage: "plus.forwardslash.minus",
+                                       description: Text("The diff, with blame beside it, appears here once a commit and a file are selected."))
             } else {
-                Color.clear
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }

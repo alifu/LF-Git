@@ -1,3 +1,4 @@
+import AppKit
 import LFKit
 import SwiftUI
 
@@ -46,54 +47,81 @@ struct EditorView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(file.name).font(.headline).foregroundStyle(.theme(.text))
-                Text(file.folder.isEmpty ? repository.name : file.folder)
-                    .font(.caption).foregroundStyle(.theme(.textSubtle)).lineLimit(1).truncationMode(.head)
-            }
-            Spacer()
-            status
-            ControlGroup {
-                Button { editor.focusPrevious() } label: { Label("Previous", systemImage: "chevron.up") }
-                    .help("Previous conflict (⌥⌘↑)")
-                Button { editor.focusNext() } label: { Label("Next", systemImage: "chevron.down") }
-                    .help("Next conflict (⌥⌘↓)")
-            }
-            .fixedSize()
-            .disabled(editor.conflictCount == 0)
-            Menu("Accept All") {
-                Button("All Current") { editor.resolveAll(as: .current) }
-                Button("All Incoming") { editor.resolveAll(as: .incoming) }
-                Button("All Both (current first)") { editor.resolveAll(as: .bothCurrentFirst) }
-            }
-            .fixedSize()
-            .disabled(editor.conflictCount == 0)
-            if file.kind == .project {
-                Button("Re-merge Project") {
-                    if editor.hasUnsavedChanges { confirmRemerge = true } else { remerge() }
+            VStack(alignment: .trailing) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(file.name).font(.headline).foregroundStyle(.theme(.text))
+                        Text(file.folder.isEmpty ? repository.name : file.folder)
+                            .font(.caption).foregroundStyle(.theme(.textSubtle)).lineLimit(1).truncationMode(.head)
+                    }
+                    Spacer()
+                    ControlGroup {
+                        Button("Current") { act(.current) }.accessibilityIdentifier("accept-current")
+                        Button("Incoming") { act(.incoming) }.accessibilityIdentifier("accept-incoming")
+                        Button("Both") { act(.bothCurrentFirst) }.accessibilityIdentifier("accept-both")
+                        Button("Edit…") { if let target = editor.targetConflict { editing = ComparedConflict(id: target) } }
+                            .accessibilityIdentifier("edit-conflict")
+                    }
+                    .fixedSize()
+                    .help("Resolve the selected conflict: take the current side, the incoming side, both, or write it yourself")
+                    .disabled(editor.conflictCount == 0)
+                    Menu("Accept All") {
+                        Button("All Current") { editor.resolveAll(as: .current) }
+                        Button("All Incoming") { editor.resolveAll(as: .incoming) }
+                        Button("All Both (current first)") { editor.resolveAll(as: .bothCurrentFirst) }
+                    }
+                    .fixedSize()
+                    .disabled(editor.conflictCount == 0)
+                    if file.kind == .project {
+                        Button("Re-merge Project") {
+                            if editor.hasUnsavedChanges { confirmRemerge = true } else { remerge() }
+                        }
+                            .help("Merge project.pbxproj object by object from git's index")
+                            .accessibilityIdentifier("remerge-project")
+                    }
+                    Button { NSWorkspace.shared.open(repository.root.appendingPathComponent(file.path)) } label: {
+                        Label("Open in Editor", systemImage: "square.and.pencil")
+                    }
+                    .help("Edit the whole file in your default editor; this window follows the changes")
+                    .accessibilityIdentifier("open-in-editor")
                 }
-                    .help("Merge project.pbxproj object by object from git's index")
-                    .accessibilityIdentifier("remerge-project")
-            }
-            Toggle("Stage on save", isOn: $editor.stageOnSave)
-                .toggleStyle(.checkbox)
-                .help("Run git add when the file is saved with every conflict resolved")
-            if editor.conflictCount == 0 || (editor.unresolvedCount == 0 && !editor.hasUnsavedChanges) {
-                Button("Mark Resolved") { markResolved() }
-                    .help("Stage the file with git add")
-                    .accessibilityIdentifier("mark-resolved")
-            }
-            Button("Save") { EditorActions.save(editor, repository: repository, app: app) }
-                .buttonStyle(.borderedProminent)
-                .disabled(!editor.hasUnsavedChanges || editor.isSaving)
-                .accessibilityIdentifier("save")
-            if editor.isSaving {
-                ProgressView().controlSize(.small)
+                
+                HStack {
+                    status
+                    ControlGroup {
+                        Button { editor.focusPrevious() } label: { Label("Previous", systemImage: "chevron.up") }
+                            .help("Previous conflict (⌥⌘↑)")
+                        Button { editor.focusNext() } label: { Label("Next", systemImage: "chevron.down") }
+                            .help("Next conflict (⌥⌘↓)")
+                    }
+                    .fixedSize()
+                    .disabled(editor.conflictCount == 0)
+                    Spacer()
+                    Toggle("Stage on save", isOn: $editor.stageOnSave)
+                        .toggleStyle(.checkbox)
+                        .help("Run git add when the file is saved with every conflict resolved")
+                    if editor.conflictCount == 0 || (editor.unresolvedCount == 0 && !editor.hasUnsavedChanges) {
+                        Button("Mark Resolved") { markResolved() }
+                            .help("Stage the file with git add")
+                            .accessibilityIdentifier("mark-resolved")
+                    }
+                    Button("Save") { EditorActions.save(editor, repository: repository, app: app) }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!editor.hasUnsavedChanges || editor.isSaving)
+                        .accessibilityIdentifier("save")
+                    if editor.isSaving {
+                        ProgressView().controlSize(.small)
+                    }
+                }
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(.theme(.surfaceRaised))
+    }
+
+    private func act(_ choice: LFChoice) {
+        EditorActions.accept(choice, in: editor)
     }
 
     private var status: some View {

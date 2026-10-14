@@ -152,17 +152,16 @@ struct LazygitFeatureTests {
         #expect(model.history.diff != nil)
     }
 
-    @Test("blame of the selected file is loaded for the selected commit")
+    @Test("blame of the selected file is loaded with its diff, for the selected commit")
     func blame() async throws {
         let fixture = try GitFixture()
         try fixture.commit("a.txt", "x\ny\n", message: "one")
         let model = try await openRepository(fixture)
         await model.history.reload()
 
-        await model.history.showBlame(true)
-
         #expect(model.history.blame?.map(\.content) == ["x", "y"])
-        await model.history.showBlame(false)
+        #expect(model.history.blameByLine[2]?.content == "y")
+        await model.history.selectFile(nil)
         #expect(model.history.blame == nil)
     }
 

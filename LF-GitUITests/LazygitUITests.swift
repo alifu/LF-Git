@@ -83,10 +83,108 @@ final class LazygitUITests: GitUITestCase {
         let row = item(app, "branch-topic")
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         row.rightClick()
-        app.menuItems["Merge into Current Branch"].click()
+        app.menuItems["Merge into Current Branch…"].click()
         app.menuItems["Merge"].firstMatch.click()
+        // It says what it is about to do and waits for a yes.
+        XCTAssertTrue(app.sheets.staticTexts["Merge ‘topic’ into ‘main’?"].waitForExistence(timeout: 5))
+        XCTAssertEqual(try git("log", "-1", "--format=%s"), "base", "nothing happened before the yes")
+        app.sheets.buttons["Merge"].click()
 
         XCTAssertTrue(waitUntil { (try? self.git("log", "-1", "--format=%s")) == "topic-work" })
+    }
+
+    func testDoubleClickChecksOutABranch() throws {
+        try commitHistory("base")
+        try git("branch", "topic")
+        let app = launch(appearance: "light")
+        showSection("Branches", in: app)
+
+        let row = item(app, "branch-topic")
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.doubleClick()
+
+        XCTAssertTrue(waitUntil { (try? self.git("branch", "--show-current")) == "topic" })
+    }
+
+    func testBranchSearchNarrowsTheList() throws {
+        try commitHistory("base")
+        try git("branch", "alpha")
+        try git("branch", "beta")
+        let app = launch(appearance: "light")
+        showSection("Branches", in: app)
+        XCTAssertTrue(item(app, "branch-alpha").waitForExistence(timeout: 10))
+
+        let search = app.textFields["branch-search"]
+        search.click()
+        search.typeText("bet")
+
+        XCTAssertTrue(item(app, "branch-beta").waitForExistence(timeout: 5))
+        XCTAssertFalse(item(app, "branch-alpha").exists)
+    }
+
+    func testSpaceStagesAndUnstagesTheSelectedFile() throws {
+        try commitHistory("base")
+        try write("base.txt", "edited\n")
+        let app = launch(appearance: "light")
+        let row = item(app, "change-unstaged-base.txt")
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+
+        row.click()
+        app.typeKey(" ", modifierFlags: [])
+        XCTAssertTrue(item(app, "change-staged-base.txt").waitForExistence(timeout: 10), "space stages the file")
+
+        app.typeKey(" ", modifierFlags: [])
+        XCTAssertTrue(item(app, "change-unstaged-base.txt").waitForExistence(timeout: 10), "space unstages it again")
+    }
+
+    func testStageThenUnstageWithTheButtonsLeavesNoStaleRow() throws {
+        try commitHistory("base")
+        try write("base.txt", "edited\n")
+        let app = launch(appearance: "light")
+        let row = item(app, "change-unstaged-base.txt")
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+
+        row.click()
+        item(app, "stage-base.txt").click()
+        XCTAssertTrue(item(app, "change-staged-base.txt").waitForExistence(timeout: 10))
+        XCTAssertTrue(waitUntil { !self.item(app, "change-unstaged-base.txt").exists }, "the unstaged row is gone")
+
+        item(app, "unstage-base.txt").click()
+        XCTAssertTrue(item(app, "change-unstaged-base.txt").waitForExistence(timeout: 10))
+        XCTAssertTrue(waitUntil { !self.item(app, "change-staged-base.txt").exists }, "the staged row is gone")
+        XCTAssertTrue(item(app, "stage-base.txt").exists, "the button offers Stage again")
+        XCTAssertFalse(item(app, "unstage-base.txt").exists, "no Unstage button is left")
+        XCTAssertTrue(waitUntil { (try? self.git("diff", "--cached", "--name-only")) == "" })
+    }
+
+    func testRibbonMinimizesAndStillSwitchesSections() throws {
+        try commitHistory("base")
+        let app = launch(appearance: "light")
+        XCTAssertTrue(item(app, "section-Changes").waitForExistence(timeout: 10))
+        XCTAssertTrue(item(app, "section-Branches").exists, "the expanded ribbon shows every section")
+
+        item(app, "ribbon-toggle").click()
+        XCTAssertTrue(item(app, "section-History").waitForExistence(timeout: 5), "the minimized ribbon keeps small buttons")
+        item(app, "section-Branches").click()
+        XCTAssertTrue(item(app, "branches-list").waitForExistence(timeout: 10), "a small button switches the section")
+
+        item(app, "ribbon-toggle").click()
+        XCTAssertTrue(item(app, "section-Tags").waitForExistence(timeout: 5))
+    }
+
+    func testChangesFoldersCollapseAndExpand() throws {
+        try commitHistory("base")
+        try FileManager.default.createDirectory(at: repository.appendingPathComponent("src"), withIntermediateDirectories: true)
+        try write("src/a.txt", "a\n")
+        try write("src/b.txt", "b\n")
+        let app = launch(appearance: "light")
+        XCTAssertTrue(item(app, "change-unstaged-src/a.txt").waitForExistence(timeout: 10))
+
+        app.buttons["changes-collapse-all"].click()
+        XCTAssertTrue(waitUntil { !self.item(app, "change-unstaged-src/a.txt").exists }, "collapse all hides the files")
+
+        app.buttons["changes-expand-all"].click()
+        XCTAssertTrue(item(app, "change-unstaged-src/a.txt").waitForExistence(timeout: 10), "expand all shows them again")
     }
 
     func testCancellingARunningFetch() throws {

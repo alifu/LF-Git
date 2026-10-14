@@ -38,9 +38,10 @@ final class HistoryModel {
     }
 
     private(set) var comparison: Comparison?
-    /// Who changed each line of `selectedFile`, when the blame view is on.
+    /// Who last changed each line of `selectedFile`, by file line number, shown beside the diff. Nil while it loads, for a
+    /// deleted or binary file, or when git cannot blame it.
     private(set) var blame: [GitBlameLine]?
-    private(set) var blameFile: String?
+    private(set) var blameByLine: [Int: GitBlameLine] = [:]
     private var generation = 0
     private var detailGeneration = 0
     /// HEAD when the log was loaded, to notice commits made elsewhere or by the app itself.
@@ -52,6 +53,8 @@ final class HistoryModel {
 
     /// Shows another list and loads it.
     func show(_ newSource: Source) async {
+        // Another branch starts on its newest commit; the same one again (after a refresh) keeps the commit being looked at.
+        if case .log(let old) = source, case .log(let new) = newSource, old != new || !hasLoaded { selection = nil }
         source = newSource
         await reload()
     }
@@ -66,9 +69,8 @@ final class HistoryModel {
         loadedHead = repository?.status.commitHash
         await loadMore()
         hasLoaded = true
-        if selection != nil, selectedCommit == nil {
-            await select(nil)
-        } else if selection == nil {
+        // A new list (another branch) starts on its newest commit, so the detail is never left empty.
+        if selection == nil || selectedCommit == nil {
             await select(commits.first?.id)
         }
     }
@@ -110,7 +112,7 @@ final class HistoryModel {
     func select(_ id: GitCommit.ID?) async {
         selection = id
         comparison = nil
-        blame = nil
+        clearBlame()
         files = []
         selectedFile = nil
         diff = nil
@@ -133,7 +135,7 @@ final class HistoryModel {
     func compare(from: String, to: String) async {
         guard let client = repository?.client else { return }
         selection = nil
-        blame = nil
+        clearBlame()
         files = []
         selectedFile = nil
         diff = nil
@@ -153,30 +155,21 @@ final class HistoryModel {
         }
     }
 
-    /// Shows the blame of the selected file as of the selected commit, or switches back to the diff.
-    func showBlame(_ on: Bool) async {
-        guard on, let path = selectedFile, let commit = selectedCommit, let client = repository?.client else {
-            blame = nil
-            return
-        }
-        detailGeneration += 1
-        let current = detailGeneration
-        do {
-            let lines = try await Self.blame(client, path: path, revision: commit.hash)
-            guard current == detailGeneration else { return }
-            blame = lines
-            blameFile = path
-            detailError = nil
-        } catch {
-            guard current == detailGeneration else { return }
-            blame = nil
-            detailError = "\(error)"
-        }
+    private func clearBlame() {
+        blame = nil
+        blameByLine = [:]
+    }
+
+    /// Reads who changed each line of `path` at `revision`. A file that cannot be blamed (deleted, binary) just has no blame column.
+    private func loadBlame(path: String, revision: String, client: GitClient, generation current: Int) async {
+        guard let lines = try? await Self.blame(client, path: path, revision: revision), current == detailGeneration else { return }
+        blame = lines
+        blameByLine = Dictionary(lines.map { ($0.number, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     func selectFile(_ path: String?) async {
         selectedFile = path
-        blame = nil
+        clearBlame()
         detailGeneration += 1
         let current = detailGeneration
         guard let path, let client = repository?.client, let change = files.first(where: { $0.path == path }) else {
@@ -196,6 +189,8 @@ final class HistoryModel {
             guard current == detailGeneration else { return }
             diff = loaded
             detailError = nil
+            guard change.status != .deleted else { return }
+            await loadBlame(path: path, revision: comparison?.to ?? selectedCommit?.hash ?? "HEAD", client: client, generation: current)
         } catch {
             guard current == detailGeneration else { return }
             diff = nil

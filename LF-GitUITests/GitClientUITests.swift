@@ -69,21 +69,22 @@ final class GitClientUITests: GitUITestCase {
         attachScreenshot(app, named: "history-dark")
     }
 
-    func testCreateABranchFromTheMenu() throws {
+    /// The branch menu is a popover that XCUITest cannot see into, so the test drives it with the keyboard:
+    /// the search box has focus when it opens, and Return switches to the first match.
+    func testSearchTheBranchMenuAndSwitch() throws {
         try write("a.txt", "1\n")
         try git("add", "-A")
         try git("commit", "-q", "-m", "base")
+        try git("branch", "feature/menu")
+        try git("branch", "release")
 
         let app = launch(appearance: "light")
-        let menu = app.menuButtons["branch-menu"].firstMatch
+        let menu = app.buttons["branch-menu"].firstMatch
         XCTAssertTrue(menu.waitForExistence(timeout: 10))
         menu.click()
-        app.menuItems["New Branch…"].click()
-        let field = app.sheets.textFields.firstMatch // a SwiftUI alert with a text field is a sheet on macOS
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        field.click()
-        field.typeText("feature/menu")
-        app.sheets.buttons["Create"].click()
+        Thread.sleep(forTimeInterval: 1) // the popover animates in; the search box takes focus when it is up
+        app.typeText("menu")
+        app.typeKey(.return, modifierFlags: [])
 
         XCTAssertTrue(waitUntil { (try? self.git("branch", "--show-current")) == "feature/menu" })
     }

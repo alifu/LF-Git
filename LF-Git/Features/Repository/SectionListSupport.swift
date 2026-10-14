@@ -33,12 +33,19 @@ struct SimpleRow: View {
 
 /// A small bar of buttons above a list.
 struct ListActionBar<Content: View>: View {
-    @ViewBuilder let content: Content
+    /// Pushes the buttons to the leading edge. Pass `false` when the content places its own `Spacer` (or fills the width).
+    let hasTrailingSpacer: Bool
+    let content: Content
+
+    init(hasTrailingSpacer: Bool = true, @ViewBuilder content: () -> Content) {
+        self.hasTrailingSpacer = hasTrailingSpacer
+        self.content = content()
+    }
 
     var body: some View {
         HStack(spacing: 8) {
             content
-            Spacer()
+            if hasTrailingSpacer { Spacer() }
         }
         .buttonStyle(.borderless)
         .font(.callout)

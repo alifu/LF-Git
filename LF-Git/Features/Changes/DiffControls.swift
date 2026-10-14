@@ -36,6 +36,24 @@ struct DiffOptionsMenu: View {
     }
 }
 
+extension GitDiffFile {
+    /// The selected diff lines that really are additions or removals.
+    func changedLines(in selection: Set<Int>) -> Set<Int> {
+        selection.filter { line in
+            guard line > index.fileHeaderLineCount else { return false }
+            let first = text(ofLine: line).first
+            return first == "+" || first == "-"
+        }
+    }
+
+    /// The hunk all of `lines` belong to, or nil when they span several hunks.
+    func singleHunk(containing lines: Set<Int>) -> DiffHunk? {
+        let hunks = Set(lines.compactMap { line in index.hunks.first { line > $0.headerLine && line <= $0.lastLine }?.id })
+        guard hunks.count == 1, let id = hunks.first else { return nil }
+        return index.hunks.first { $0.id == id }
+    }
+}
+
 /// Buttons that act on the lines selected in the diff: stage or unstage them, or throw them away.
 struct LineSelectionBar: View {
     let repository: RepositoryModel
@@ -45,28 +63,17 @@ struct LineSelectionBar: View {
     let staged: Bool
 
     /// The selected lines that really are additions or removals.
-    private var changedLines: Set<Int> {
-        selection.filter { line in
-            guard line > diff.index.fileHeaderLineCount else { return false }
-            let first = diff.text(ofLine: line).first
-            return first == "+" || first == "-"
-        }
-    }
-
-    private var hunk: DiffHunk? {
-        let hunks = Set(changedLines.compactMap { line in diff.index.hunks.first { line > $0.headerLine && line <= $0.lastLine }?.id })
-        guard hunks.count == 1, let id = hunks.first else { return nil }
-        return diff.index.hunks.first { $0.id == id }
-    }
+    private var changedLines: Set<Int> { diff.changedLines(in: selection) }
+    private var hunk: DiffHunk? { diff.singleHunk(containing: changedLines) }
 
     var body: some View {
         HStack(spacing: 10) {
             if changedLines.isEmpty {
-                Text("Select lines in the diff to stage or discard them one by one.")
+                Text("Click lines in the diff (⇧ or ⌘ for several), then press Space to stage them.")
                     .font(.callout).foregroundStyle(.theme(.textSubtle))
             } else if let hunk {
                 Text("\(changedLines.count) line\(changedLines.count == 1 ? "" : "s") selected").font(.callout)
-                Button(staged ? "Unstage Lines" : "Stage Lines") {
+                Button(staged ? "Unstage Lines (Space)" : "Stage Lines (Space)") {
                     app.run {
                         try await repository.changes.applyLines(changedLines, in: hunk, of: diff)
                         selection = []
@@ -112,19 +119,8 @@ struct CommitLineBar: View {
     /// Rewriting is only possible on the checked-out branch.
     let canRewrite: Bool
 
-    private var changedLines: Set<Int> {
-        selection.filter { line in
-            guard line > diff.index.fileHeaderLineCount else { return false }
-            let first = diff.text(ofLine: line).first
-            return first == "+" || first == "-"
-        }
-    }
-
-    private var hunk: DiffHunk? {
-        let hunks = Set(changedLines.compactMap { line in diff.index.hunks.first { line > $0.headerLine && line <= $0.lastLine }?.id })
-        guard hunks.count == 1, let id = hunks.first else { return nil }
-        return diff.index.hunks.first { $0.id == id }
-    }
+    private var changedLines: Set<Int> { diff.changedLines(in: selection) }
+    private var hunk: DiffHunk? { diff.singleHunk(containing: changedLines) }
 
     var body: some View {
         HStack(spacing: 10) {

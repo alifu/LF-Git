@@ -9,13 +9,17 @@ struct RepositoryView: View {
     @State private var messageText = ""
 
     var body: some View {
+        VStack(spacing: 0) {
+            SectionRibbon(repository: repository)
+//                .frame(height: 120)
+            splitView
+        }
+    }
+
+    private var splitView: some View {
         NavigationSplitView {
-            VStack(spacing: 0) {
-                SectionGrid(repository: repository)
-                Divider()
-                sidebar
-            }
-            .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 480)
+            sidebar
+                .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 480)
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -119,50 +123,6 @@ struct RepositoryView: View {
     }
 }
 
-/// The sections as a grid of small buttons, with counts.
-struct SectionGrid: View {
-    let repository: RepositoryModel
-
-    private let columns = [GridItem(.adaptive(minimum: 92), spacing: 4)]
-
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: 4) {
-            ForEach(RepositorySection.allCases) { section in
-                Button {
-                    repository.section = section
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: section.symbol).frame(width: 14)
-                        Text(section.rawValue).lineLimit(1)
-                        if let count = count(section), count > 0 {
-                            Text("\(count)").font(.caption2.monospacedDigit().weight(.semibold))
-                        }
-                    }
-                    .font(.callout)
-                    .frame(maxWidth: .infinity, minHeight: 24)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(.theme(repository.section == section ? .accentSubtle : .surfaceRaised)))
-                    .foregroundStyle(.theme(repository.section == section ? .accentText : .text))
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(repository.section == section ? .isSelected : [])
-                .accessibilityIdentifier("section-\(section.rawValue)")
-            }
-        }
-        .padding(8)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("section-picker")
-    }
-
-    private func count(_ section: RepositorySection) -> Int? {
-        switch section {
-        case .changes: repository.status.entries.filter { $0.kind != .unmerged }.count
-        case .stash: repository.stashes.count
-        case .conflicts: repository.files.count
-        default: nil
-        }
-    }
-}
-
 struct ConflictsSidebar: View {
     @Bindable var repository: RepositoryModel
 
@@ -245,30 +205,5 @@ private struct FileRow: View {
     PreviewRepository(width: 1200, height: 800) { repository, app in
         RepositoryView(repository: repository, app: app)
     }
-}
-#endif
-
-#if DEBUG
-#Preview("Section grid") {
-    PreviewRepository(width: 360) { repository, app in
-        SectionGrid(repository: repository).padding()
-    }
-}
-#endif
-
-#if DEBUG
-#Preview("Conflicts sidebar") {
-    PreviewRepository(width: 320, height: 500) { repository, app in
-        ConflictsSidebar(repository: repository)
-    }
-}
-#endif
-
-#if DEBUG
-#Preview("Repository window (dark)") {
-    PreviewRepository(width: 1200, height: 800) { repository, app in
-        RepositoryView(repository: repository, app: app)
-    }
-    .preferredColorScheme(.dark)
 }
 #endif

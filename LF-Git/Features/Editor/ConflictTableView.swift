@@ -13,11 +13,15 @@ struct ConflictTableView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let table = NSTableView()
+        let table = ConflictNSTableView()
         table.headerView = nil
         table.rowHeight = EditorMetrics.rowHeight
         table.intercellSpacing = .zero
-        table.selectionHighlightStyle = .none
+        // Lines can be selected (drag, ⇧-click, ⌘A) and copied; the row view draws the highlight itself.
+        table.selectionHighlightStyle = .regular
+        table.allowsMultipleSelection = true
+        table.target = context.coordinator
+        table.doubleAction = #selector(Coordinator.doubleClicked)
         table.backgroundColor = .theme(.background)
         table.style = .plain
         table.columnAutoresizingStyle = .noColumnAutoresizing
@@ -35,6 +39,7 @@ struct ConflictTableView: NSViewRepresentable {
         scroll.autohidesScrollers = true
         scroll.backgroundColor = .theme(.background)
         context.coordinator.table = table
+        table.onCopy = { [weak coordinator = context.coordinator] rows in coordinator?.text(ofRows: rows) ?? "" }
         return scroll
     }
 
@@ -162,7 +167,24 @@ struct ConflictTableView: NSViewRepresentable {
             if let conflict = editor.role(ofLine: table.selectedRow + 1).conflict {
                 editor.focusedConflict = conflict
             }
-            table.deselectAll(nil)
+        }
+
+        /// Double-click on a line of a conflict: write its resolution by hand.
+        @objc func doubleClicked() {
+            guard let table, table.clickedRow >= 0, let conflict = editor.role(ofLine: table.clickedRow + 1).conflict else { return }
+            editor.focusedConflict = conflict
+            onEdit(conflict)
+        }
+
+        /// The code of the selected rows, one per line; marker rows (the conflict's header, separator and end) are left out.
+        func text(ofRows rows: IndexSet) -> String {
+            rows.compactMap { row -> String? in
+                switch editor.role(ofLine: row + 1) {
+                case .header, .baseHeader, .separator, .footer: nil
+                default: editor.text(ofLine: row + 1)
+                }
+            }
+            .joined(separator: "\n")
         }
 
         private func perform(_ action: ConflictHeaderCell.Action, on conflict: Int) {
@@ -246,5 +268,17 @@ enum RowStyle {
         case .type: .syntaxType
         case .identifier: .syntaxIdentifier
         }
+    }
+}
+
+/// A table that copies its selected lines (⌘C); select all and shift-click are the table's own.
+final class ConflictNSTableView: NSTableView {
+    var onCopy: ((IndexSet) -> String)?
+
+    @objc func copy(_ sender: Any?) {
+        guard let onCopy, !selectedRowIndexes.isEmpty else { return }
+        let text = onCopy(selectedRowIndexes)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }

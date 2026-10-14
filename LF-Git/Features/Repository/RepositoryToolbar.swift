@@ -1,58 +1,41 @@
 import LFKit
 import SwiftUI
 
-/// The branch menu: switch, create and delete branches.
+/// The branch menu: a popover with a search box to switch to a branch, plus create and delete.
 struct BranchMenu: View {
     let repository: RepositoryModel
     let app: AppModel
+    @State private var isOpen = false
+    @State private var query = ""
     @State private var creating = false
     @State private var newName = ""
     @State private var deleting: GitBranch?
+    @FocusState private var searchFocused: Bool
 
-    private var locals: [GitBranch] { repository.branches.filter { !$0.isRemote } }
-    private var remotes: [GitBranch] { repository.branches.filter(\.isRemote) }
+    private var searchText: String { query.trimmingCharacters(in: .whitespaces) }
+    private var locals: [GitBranch] { matching(repository.branches.filter { !$0.isRemote }) }
+    private var remotes: [GitBranch] { matching(repository.branches.filter(\.isRemote)) }
+
+    private func matching(_ list: [GitBranch]) -> [GitBranch] {
+        searchText.isEmpty ? list : list.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
 
     var body: some View {
-        Menu {
-            Section("Branches") {
-                ForEach(locals) { branch in
-                    Button {
-                        switchTo(branch.name)
-                    } label: {
-                        Label(branch.name, systemImage: branch.isCurrent ? "checkmark" : "arrow.triangle.branch")
-                    }
-                    .disabled(branch.isCurrent)
-                }
-            }
-            if !remotes.isEmpty {
-                Menu("Remote Branches") {
-                    ForEach(remotes) { branch in
-                        Button(branch.name) { switchTo(branch.name) }
-                    }
-                }
-            }
-            Divider()
-            Button("New Branch…") {
-                newName = ""
-                creating = true
-            }
-            Menu("Delete Branch") {
-                ForEach(locals.filter { !$0.isCurrent }) { branch in
-                    Button(branch.name, role: .destructive) { deleting = branch }
-                }
-            }
-            .disabled(locals.count < 2)
-        } label: {
+        Button { isOpen.toggle() } label: {
             // An explicit HStack: toolbar Labels show only their icon.
             HStack(spacing: 4) {
                 Image(systemName: "arrow.triangle.branch")
                 Text(repository.status.branch ?? "Detached HEAD").lineLimit(1)
+                Image(systemName: "chevron.down").font(.caption2)
             }
         }
-        .menuIndicator(.visible)
         .help("Switch or create a branch")
         .accessibilityIdentifier("branch-menu")
         .disabled(repository.isBusy || repository.operation != nil)
+        .popover(isPresented: $isOpen, arrowEdge: .bottom) { popover }
+        .onChange(of: isOpen) { _, open in
+            if open { query = "" }
+        }
         .alert("New Branch", isPresented: $creating) {
             TextField("Branch name", text: $newName)
             Button("Create") { run { try await repository.createBranch(newName.trimmingCharacters(in: .whitespaces)) } }
@@ -70,6 +53,76 @@ struct BranchMenu: View {
         } message: {
             Text("Git refuses if the branch has commits that are not merged.")
         }
+    }
+
+    private var popover: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.theme(.textSubtle))
+                TextField("Search branches", text: $query)
+                    .textFieldStyle(.plain)
+                    .focused($searchFocused)
+                    .onSubmit { if let first = locals.first(where: { !$0.isCurrent }) ?? remotes.first { choose(first) } }
+                    .accessibilityIdentifier("branch-menu-search")
+            }
+            .padding(10)
+            Divider()
+            List {
+                if locals.isEmpty && remotes.isEmpty {
+                    Text("No branches match").foregroundStyle(.theme(.textSubtle))
+                }
+                if !locals.isEmpty {
+                    Section("Branches") { ForEach(locals) { branchRow($0) } }
+                }
+                if !remotes.isEmpty {
+                    Section("Remote Branches") { ForEach(remotes) { branchRow($0) } }
+                }
+            }
+            .listStyle(.plain)
+            .frame(height: 260)
+            Divider()
+            HStack {
+                Button("New Branch…") {
+                    isOpen = false
+                    newName = ""
+                    creating = true
+                }
+                .accessibilityIdentifier("branch-menu-new")
+                Spacer()
+                Menu("Delete Branch") {
+                    ForEach(repository.branches.filter { !$0.isRemote && !$0.isCurrent }) { branch in
+                        Button(branch.name, role: .destructive) {
+                            isOpen = false
+                            deleting = branch
+                        }
+                    }
+                }
+                .fixedSize()
+                .disabled(repository.branches.filter { !$0.isRemote }.count < 2)
+            }
+            .buttonStyle(.borderless)
+            .padding(10)
+        }
+        .frame(width: 300)
+        .onAppear { searchFocused = true }
+    }
+
+    private func branchRow(_ branch: GitBranch) -> some View {
+        Button { choose(branch) } label: {
+            Label(branch.name, systemImage: branch.isCurrent ? "checkmark" : (branch.isRemote ? "cloud" : "arrow.triangle.branch"))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(branch.isCurrent)
+        .accessibilityIdentifier("branch-menu-\(branch.name)")
+    }
+
+    private func choose(_ branch: GitBranch) {
+        isOpen = false
+        switchTo(branch.name)
     }
 
     private func switchTo(_ name: String) {
@@ -102,7 +155,7 @@ struct RemoteButtons: View {
             Group {
             if !repository.copiedCommits.isEmpty {
                 Menu {
-                    Button("Paste (Cherry-Pick)") { run { try await repository.pasteCopiedCommits() } }
+                    Button("Paste (Cherry-Pick)…") { repository.requestPaste(app: app) }
                     Button("Clear") { repository.clearCopiedCommits() }
                 } label: {
                     Label("\(repository.copiedCommits.count)", systemImage: "doc.on.clipboard")
@@ -117,8 +170,8 @@ struct RemoteButtons: View {
             .accessibilityIdentifier("fetch")
             Menu {
                 Button("Pull (fast-forward only)") { run { try await repository.pull(.fastForwardOnly) } }
-                Button("Pull and merge") { run { try await repository.pull(.merge) } }
-                Button("Pull and rebase") { run { try await repository.pull(.rebase) } }
+                Button("Pull and merge…") { repository.requestPull(.merge, app: app) }
+                Button("Pull and rebase…") { repository.requestPull(.rebase, app: app) }
             } label: {
                 countLabel("arrow.down", repository.status.behind, name: "Pull")
             } primaryAction: {

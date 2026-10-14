@@ -1,10 +1,14 @@
 import AppKit
 import LFKit
 
-/// Old and new line numbers followed by the diff line.
+/// Optional blame (who last changed the line), old and new line numbers, then the diff line.
 final class DiffLineCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("diff-line")
+    /// Room for "a1b2c3d Author Name" before the line numbers.
+    static let blameWidth: CGFloat = 190
 
+    private let blameLabel = NSTextField(labelWithString: "")
+    private var blameWidthConstraint: NSLayoutConstraint!
     private let oldNumber = NSTextField(labelWithString: "")
     private let newNumber = NSTextField(labelWithString: "")
     private let code = NSTextField(labelWithString: "")
@@ -19,17 +23,25 @@ final class DiffLineCell: NSTableCellView {
             label.alignment = .right
             label.textColor = .theme(.textSubtle)
         }
+        blameLabel.font = EditorMetrics.gutterFont
+        blameLabel.textColor = .theme(.textSubtle)
+        blameLabel.lineBreakMode = .byTruncatingTail
+        blameLabel.cell?.usesSingleLineMode = true
         code.font = EditorMetrics.codeFont
         code.lineBreakMode = .byClipping
         code.cell?.usesSingleLineMode = true
-        for view in [oldNumber, newNumber, code] {
+        for view in [blameLabel, oldNumber, newNumber, code] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
         oldWidth = oldNumber.widthAnchor.constraint(equalToConstant: 40)
         newWidth = newNumber.widthAnchor.constraint(equalToConstant: 40)
+        blameWidthConstraint = blameLabel.widthAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([
-            oldNumber.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            blameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            blameWidthConstraint,
+            blameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            oldNumber.leadingAnchor.constraint(equalTo: blameLabel.trailingAnchor, constant: 6),
             oldWidth,
             newNumber.leadingAnchor.constraint(equalTo: oldNumber.trailingAnchor, constant: 6),
             newWidth,
@@ -43,7 +55,11 @@ final class DiffLineCell: NSTableCellView {
 
     required init?(coder: NSCoder) { nil }
 
-    func configure(old: Int, new: Int, gutter: CGFloat, text: NSAttributedString) {
+    /// - Parameter blame: the text of the blame column, or nil when the diff has no blame column at all.
+    func configure(old: Int, new: Int, gutter: CGFloat, text: NSAttributedString, blame: String? = nil, blameTip: String? = nil) {
+        blameWidthConstraint.constant = blame == nil ? 0 : Self.blameWidth
+        blameLabel.stringValue = blame ?? ""
+        blameLabel.toolTip = blameTip
         oldWidth.constant = gutter
         newWidth.constant = gutter
         oldNumber.stringValue = old > 0 ? "\(old)" : ""
@@ -66,7 +82,7 @@ final class DiffHunkCell: NSTableCellView {
         title.font = EditorMetrics.gutterFont
         title.textColor = .theme(.accentText)
         title.lineBreakMode = .byTruncatingTail
-        button.isBordered = false
+        button.bezelStyle = .inline
         button.target = self
         button.action = #selector(tapped)
         for view in [title, button] as [NSView] {
