@@ -51,13 +51,18 @@
     "Orange400": "#FCA700",
     "Orange700": "#BD5B00",
     "Yellow300": "#EED12B",
-    "Yellow800": "#7F5F01"
+    "Yellow800": "#7F5F01",
+    "Teal700": "#1D7F8C",
+    "Orange100": "#FFF5EB",
+    "Orange800": "#702E00",
+    "Orange1000": "#38291E"
   },
   "tokens": {
     "accent":                 { "light": "Green700",     "dark": "Green400",        "use": "Primary buttons, focus ring, selection" },
     "accentHover":            { "light": "Green800",     "dark": "Green300",        "use": "Hover/pressed primary" },
     "onAccent":               { "light": "Neutral0",     "dark": "DarkNeutral0",    "use": "Text and icons on accent" },
     "accentSubtle":           { "light": "Green100",     "dark": "Green1000",       "use": "Selected row, active sidebar item" },
+    "lineSelection":          { "light": "Blue300",      "dark": "Blue600",         "use": "Selected lines of a diff or conflict (blue, so it never blends with the green/red change colors)" },
     "accentText":             { "light": "Green800",     "dark": "Green300",        "use": "Links, resolved labels" },
     "background":             { "light": "Neutral0",     "dark": "DarkNeutral0",    "use": "Window and editor background" },
     "surfaceSunken":          { "light": "Neutral100",   "dark": "DarkNeutral-100", "use": "Sidebar, gutter" },
@@ -86,6 +91,13 @@
     "syntaxComment":          { "light": "Neutral700",   "dark": "DarkNeutral700",  "use": "Syntax: comments" },
     "syntaxType":             { "light": "Blue700",      "dark": "Blue300",         "use": "Syntax: types" },
     "syntaxIdentifier":       { "light": "Yellow800",    "dark": "Yellow300",       "use": "Syntax: pbxproj UUIDs" }
+  },
+  "accentChoices": {
+    "green":  {},
+    "blue":   { "accent": ["Blue700", "Blue400"],     "accentHover": ["Blue900", "Blue300"],     "accentSubtle": ["Blue100", "Blue1000"],     "accentText": ["Blue700", "Blue300"] },
+    "purple": { "accent": ["Purple700", "Purple300"], "accentHover": ["Purple900", "Purple200"], "accentSubtle": ["Purple100", "Purple1000"], "accentText": ["Purple700", "Purple200"] },
+    "teal":   { "accent": ["Teal700", "Teal500"],     "accentHover": ["Teal900", "Teal200"],     "accentSubtle": ["Teal100", "Teal1000"],     "accentText": ["Teal900", "Teal200"] },
+    "orange": { "accent": ["Orange700", "Orange400"], "accentHover": ["Orange800", "Orange300"], "accentSubtle": ["Orange100", "Orange1000"], "accentText": ["Orange800", "Orange300"] }
   },
   "contrast": {
     "minimum": 4.5,

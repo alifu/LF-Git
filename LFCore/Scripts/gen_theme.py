@@ -4,7 +4,8 @@
 Outputs (committed to the repo):
   LF-Git/Assets.xcassets/Theme/lf<Token>.colorset   one per token, light + dark
   LF-Git/Assets.xcassets/AccentColor.colorset       mirrors the `accent` token
-  LF-Git/Theme/LFThemeToken.generated.swift         typed token enum
+  LF-Git/Assets.xcassets/Theme/lf<Token><Choice>.colorset   the accent tokens again for every accent choice
+  LF-Git/Theme/LFThemeToken.generated.swift         typed token enum and the accent choices
 
 Usage:
   gen_theme.py           regenerate files and verify contrast
@@ -57,10 +58,38 @@ def validate_theme(theme: dict) -> None:
             ref = spec.get(appearance)
             if ref not in palette:
                 raise ThemeError(f"token {token}.{appearance}: unknown palette color '{ref}'")
+    for choice, overrides in theme.get("accentChoices", {}).items():
+        if not TOKEN_PATTERN.match(choice):
+            raise ThemeError(f"accent choice '{choice}' must be lowerCamelCase")
+        for token, pair in overrides.items():
+            if token not in tokens:
+                raise ThemeError(f"accent choice {choice}: unknown token '{token}'")
+            if len(pair) != 2 or any(ref not in palette for ref in pair):
+                raise ThemeError(f"accent choice {choice}.{token}: needs [light, dark] palette colors")
 
 
 def asset_name(token: str) -> str:
     return "lf" + token[0].upper() + token[1:]
+
+
+def choice_asset_name(token: str, choice: str) -> str:
+    return asset_name(token) + choice[0].upper() + choice[1:]
+
+
+def accent_overrides(theme: dict) -> list[str]:
+    """Tokens that change with the accent choice, in the order the choices list them."""
+    names: list[str] = []
+    for overrides in theme.get("accentChoices", {}).values():
+        names += [token for token in overrides if token not in names]
+    return names
+
+
+def themed_for_choice(theme: dict, choice: str) -> dict:
+    """The theme as it looks with `choice` selected: the choice's colors replace the base accent tokens."""
+    tokens = dict(theme["tokens"])
+    for token, (light, dark) in theme["accentChoices"][choice].items():
+        tokens[token] = {**tokens[token], "light": light, "dark": dark}
+    return {**theme, "tokens": tokens}
 
 
 def hex_of(theme: dict, token: str, appearance: str) -> str:
@@ -79,6 +108,13 @@ def contrast_ratio(first: str, second: str) -> float:
 
 
 def contrast_failures(theme: dict) -> list[str]:
+    failures = base_contrast_failures(theme)
+    for choice in theme.get("accentChoices", {}):
+        failures += [f"[accent {choice}] {line}" for line in base_contrast_failures(themed_for_choice(theme, choice))]
+    return failures
+
+
+def base_contrast_failures(theme: dict) -> list[str]:
     minimum = theme["contrast"]["minimum"]
     failures = []
     for foreground, background in theme["contrast"]["pairs"]:
@@ -131,7 +167,33 @@ def swift_source(theme: dict) -> str:
         lines.append(f"    /// {spec.get('use', '')}")
         lines.append(f'    case {token} = "{asset_name(token)}"')
     lines.append("}")
+    lines += swift_accent_choices(theme)
     return "\n".join(lines) + "\n"
+
+
+def swift_accent_choices(theme: dict) -> list[str]:
+    choices = list(theme.get("accentChoices", {}))
+    overridden = ", ".join(f".{token}" for token in accent_overrides(theme))
+    lines = [
+        "",
+        "/// The accent colors the user can pick in Settings. The first is the default; its colors are the base tokens.",
+        "enum LFAccentChoice: String, CaseIterable, Sendable {",
+    ]
+    lines += [f"    case {choice}" for choice in choices]
+    lines += [
+        "",
+        f"    /// The tokens a choice replaces; every other token is the same whatever the choice.",
+        f"    static let overriddenTokens: Set<LFThemeToken> = [{overridden}]",
+        "",
+        "    /// Added to the base color set's name to get this choice's color set (empty for the default).",
+        "    var assetSuffix: String {",
+        "        switch self {",
+    ]
+    for index, choice in enumerate(choices):
+        suffix = "" if index == 0 else choice[0].upper() + choice[1:]
+        lines.append(f'        case .{choice}: "{suffix}"')
+    lines += ["        }", "    }", "}"]
+    return lines
 
 
 def expected_files(theme: dict) -> dict[Path, str]:
@@ -139,6 +201,12 @@ def expected_files(theme: dict) -> dict[Path, str]:
     for token in theme["tokens"]:
         light, dark = hex_of(theme, token, "light"), hex_of(theme, token, "dark")
         files[THEME_ASSETS_DIR / f"{asset_name(token)}.colorset" / "Contents.json"] = colorset_contents(light, dark)
+    for index, (choice, overrides) in enumerate(theme.get("accentChoices", {}).items()):
+        if index == 0:
+            continue  # the default choice is the base color sets
+        for token, (light_ref, dark_ref) in overrides.items():
+            path = THEME_ASSETS_DIR / f"{choice_asset_name(token, choice)}.colorset" / "Contents.json"
+            files[path] = colorset_contents(theme["palette"][light_ref], theme["palette"][dark_ref])
     accent_light, accent_dark = hex_of(theme, "accent", "light"), hex_of(theme, "accent", "dark")
     files[ASSETS_DIR / "AccentColor.colorset" / "Contents.json"] = colorset_contents(accent_light, accent_dark)
     files[SWIFT_OUT] = swift_source(theme)
@@ -149,6 +217,9 @@ def stale_colorsets(theme: dict) -> list[Path]:
     if not THEME_ASSETS_DIR.exists():
         return []
     wanted = {f"{asset_name(token)}.colorset" for token in theme["tokens"]}
+    for index, (choice, overrides) in enumerate(theme.get("accentChoices", {}).items()):
+        if index > 0:
+            wanted |= {f"{choice_asset_name(token, choice)}.colorset" for token in overrides}
     return [path for path in THEME_ASSETS_DIR.glob("*.colorset") if path.name not in wanted]
 
 

@@ -96,9 +96,10 @@ struct EnvironmentSettingsTab: View {
     }
 }
 
-/// Light, dark or follow the system.
+/// Light, dark or follow the system, and the accent color.
 struct ThemeSettingsTab: View {
     @AppStorage(AppearanceSetting.storageKey) private var appearanceRaw = AppearanceSetting.system.rawValue
+    @AppStorage(AccentSetting.storageKey) private var accentRaw = LFAccentChoice.green.rawValue
 
     var body: some View {
         Form {
@@ -108,6 +109,20 @@ struct ThemeSettingsTab: View {
                     .accessibilityIdentifier("settings-dark")
                 Toggle("Follow system appearance", isOn: followsSystem)
                     .accessibilityIdentifier("settings-system-appearance")
+            }
+            Section {
+                HStack(spacing: 14) {
+                    ForEach(LFAccentChoice.allCases, id: \.self) { choice in
+                        AccentSwatch(choice: choice, isSelected: AccentSetting.choice(storedValue: accentRaw) == choice) {
+                            accentRaw = choice.rawValue
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            } header: {
+                Text("Accent color")
+            } footer: {
+                Text("Used for buttons, the selected section and row, and links. Green is the default.")
             }
         }
         .formStyle(.grouped)
@@ -132,6 +147,32 @@ struct ThemeSettingsTab: View {
     /// Turning "follow system" off keeps what the screen shows now.
     private var currentSystemChoice: AppearanceSetting {
         NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
+    }
+}
+
+/// One round color sample; the chosen one has a ring and a check.
+private struct AccentSwatch: View {
+    let choice: LFAccentChoice
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Circle()
+                    .fill(Color(LFThemeToken.accent.assetName(for: choice), bundle: .main))
+                    .frame(width: 26, height: 26)
+                    .overlay { if isSelected { Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(.white) } }
+                    .padding(3)
+                    .overlay(Circle().stroke(.primary.opacity(isSelected ? 0.7 : 0), lineWidth: 2))
+                Text(choice.rawValue.capitalized).font(.caption)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(choice.rawValue.capitalized)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("settings-accent-\(choice.rawValue)")
     }
 }
 

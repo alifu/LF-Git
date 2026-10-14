@@ -10,6 +10,8 @@ enum LFThemeToken: String, CaseIterable, Sendable {
     case onAccent = "lfOnAccent"
     /// Selected row, active sidebar item
     case accentSubtle = "lfAccentSubtle"
+    /// Selected lines of a diff or conflict (blue, so it never blends with the green/red change colors)
+    case lineSelection = "lfLineSelection"
     /// Links, resolved labels
     case accentText = "lfAccentText"
     /// Window and editor background
@@ -66,4 +68,27 @@ enum LFThemeToken: String, CaseIterable, Sendable {
     case syntaxType = "lfSyntaxType"
     /// Syntax: pbxproj UUIDs
     case syntaxIdentifier = "lfSyntaxIdentifier"
+}
+
+/// The accent colors the user can pick in Settings. The first is the default; its colors are the base tokens.
+enum LFAccentChoice: String, CaseIterable, Sendable {
+    case green
+    case blue
+    case purple
+    case teal
+    case orange
+
+    /// The tokens a choice replaces; every other token is the same whatever the choice.
+    static let overriddenTokens: Set<LFThemeToken> = [.accent, .accentHover, .accentSubtle, .accentText]
+
+    /// Added to the base color set's name to get this choice's color set (empty for the default).
+    var assetSuffix: String {
+        switch self {
+        case .green: ""
+        case .blue: "Blue"
+        case .purple: "Purple"
+        case .teal: "Teal"
+        case .orange: "Orange"
+        }
+    }
 }

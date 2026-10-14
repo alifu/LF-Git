@@ -30,6 +30,43 @@ struct ThemeTokenTests {
         #expect(hex(of: .conflictCurrentHeader, in: .darkAqua) == "#164555")
     }
 
+    @Test("green is the default accent and uses the base color sets")
+    func greenIsTheDefault() {
+        #expect(AccentSetting.choice(storedValue: nil) == .green)
+        #expect(AccentSetting.choice(storedValue: "nonsense") == .green)
+        #expect(LFThemeToken.accent.assetName(for: .green) == "lfAccent")
+    }
+
+    @Test("only accent tokens change with the choice")
+    func onlyAccentTokensChange() {
+        #expect(LFThemeToken.accent.assetName(for: .blue) == "lfAccentBlue")
+        #expect(LFThemeToken.accentSubtle.assetName(for: .orange) == "lfAccentSubtleOrange")
+        #expect(LFThemeToken.text.assetName(for: .blue) == "lfText")
+        #expect(LFThemeToken.onAccent.assetName(for: .purple) == "lfOnAccent")
+    }
+
+    @Test("every accent choice has a color set for every accent token, differing from green", arguments: LFAccentChoice.allCases)
+    func choiceHasColors(choice: LFAccentChoice) throws {
+        for token in LFAccentChoice.overriddenTokens {
+            let name = token.assetName(for: choice)
+            #expect(NSColor(named: name) != nil, "missing \(name)")
+            if choice != .green {
+                #expect(hex(named: name, in: .aqua) != hex(named: token.assetName(for: .green), in: .aqua), "\(name) equals green")
+            }
+        }
+    }
+
+    private func hex(named name: String, in appearanceName: NSAppearance.Name) -> String? {
+        guard let appearance = NSAppearance(named: appearanceName), let color = NSColor(named: name) else { return nil }
+        var result: String?
+        appearance.performAsCurrentDrawingAppearance {
+            guard let srgb = color.usingColorSpace(.sRGB) else { return }
+            result = String(format: "#%02X%02X%02X", Int((srgb.redComponent * 255).rounded()),
+                            Int((srgb.greenComponent * 255).rounded()), Int((srgb.blueComponent * 255).rounded()))
+        }
+        return result
+    }
+
     private func hex(of token: LFThemeToken, in appearanceName: NSAppearance.Name) -> String? {
         guard let appearance = NSAppearance(named: appearanceName),
               let color = NSColor(named: token.rawValue) else { return nil }

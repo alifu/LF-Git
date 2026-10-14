@@ -9,7 +9,7 @@ struct LF_GitApp: App {
     var body: some Scene {
         Window("LF-Git", id: "main") {
             ContentView(app: app)
-                .tint(.theme(.accent))
+                .syncsAccent()
                 .syncsAppearance()
                 .onAppear {
                     GitDiffFile.sweepStaleTemporaryFiles()
@@ -25,7 +25,7 @@ struct LF_GitApp: App {
 
         Settings {
             SettingsView()
-                .tint(.theme(.accent))
+                .syncsAccent(rebuilds: false)
                 .syncsAppearance()
         }
     }
