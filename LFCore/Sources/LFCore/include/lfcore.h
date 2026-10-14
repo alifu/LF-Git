@@ -21,8 +21,8 @@ extern "C" {
 #endif
 
 #define LF_VERSION_MAJOR 0
-#define LF_VERSION_MINOR 1
-#define LF_VERSION_PATCH 1
+#define LF_VERSION_MINOR 2
+#define LF_VERSION_PATCH 0
 
 /* Default length of conflict marker runs ("<<<<<<<"), as written by git. */
 #define LF_DEFAULT_MARKER_SIZE 7
