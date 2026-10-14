@@ -24,7 +24,7 @@ cask "lf-git" do
   desc "Merge tool and Git client for conflicts in files of any size"
   homepage "https://github.com/alifu/LF-Git"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "LF-Git.app"
   binary "lfgit"
