@@ -2,10 +2,12 @@ import Foundation
 import LFKit
 import Observation
 
-/// One row of the changes list: a path on the staged or the unstaged side.
+/// One row of the changes list: a path on the staged or the unstaged side. A folder row (`path` ends in `/`) stands
+/// for every changed file below it.
 nonisolated struct ChangeSelection: Hashable, Sendable {
     let path: String
     let staged: Bool
+    var isFolder = false
 }
 
 /// Staging, diffs and committing for the repository's work tree.

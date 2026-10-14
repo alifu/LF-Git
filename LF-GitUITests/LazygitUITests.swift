@@ -6,6 +6,11 @@ final class LazygitUITests: GitUITestCase {
         app.descendants(matching: .any)[id]
     }
 
+    /// A folder row. The list folds the row's label and buttons into one element whose identifier lists them all.
+    private func folderRow(_ app: XCUIApplication, _ side: String, _ folder: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "folder-\(side)-\(folder)")).firstMatch
+    }
+
     private func commitHistory(_ subjects: String...) throws {
         for subject in subjects {
             try write("\(subject).txt", "\(subject)\n")
@@ -135,6 +140,43 @@ final class LazygitUITests: GitUITestCase {
 
         app.typeKey(" ", modifierFlags: [])
         XCTAssertTrue(item(app, "change-unstaged-base.txt").waitForExistence(timeout: 10), "space unstages it again")
+    }
+
+    func testSpaceOnAFolderStagesEveryFileInIt() throws {
+        try commitHistory("base")
+        try write("src/a.txt", "a\n")
+        try write("src/b.txt", "b\n")
+        try git("add", "-A")
+        try git("commit", "-q", "-m", "src")
+        try write("src/a.txt", "a2\n")
+        try write("src/b.txt", "b2\n")
+        let app = launch(appearance: "light")
+                let folder = folderRow(app, "unstaged", "src/")
+        XCTAssertTrue(folder.waitForExistence(timeout: 10))
+
+        folder.click()
+        app.typeKey(" ", modifierFlags: [])
+        XCTAssertTrue(waitUntil { (try? self.git("diff", "--cached", "--name-only")) == "src/a.txt\nsrc/b.txt" },
+                      "space on a folder stages all of its files")
+    }
+
+    func testDiscardAFolderThrowsAwayEveryChangeInIt() throws {
+        try commitHistory("base")
+        try write("src/a.txt", "a\n")
+        try write("src/b.txt", "b\n")
+        try git("add", "-A")
+        try git("commit", "-q", "-m", "src")
+        try write("src/a.txt", "a2\n")
+        try write("src/b.txt", "b2\n")
+        let app = launch(appearance: "light")
+        let folder = folderRow(app, "unstaged", "src/")
+        XCTAssertTrue(folder.waitForExistence(timeout: 10))
+
+        folder.rightClick()
+        app.menuItems["Discard Changes in Folder…"].firstMatch.click()
+        app.sheets.buttons["Discard Changes"].firstMatch.click()
+        XCTAssertTrue(waitUntil { (try? self.git("status", "--porcelain")) == "" },
+                      "the files are restored")
     }
 
     func testStageThenUnstageWithTheButtonsLeavesNoStaleRow() throws {

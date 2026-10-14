@@ -8,7 +8,8 @@ Everything that moves changes between *Changes* (work tree) and *Staged* (index)
 |---|---|---|---|
 | Whole file(s) | row button, context menu, **Space**, header buttons | `ChangesModel.stage(_:)` / `unstage(_:)` | `git add -- paths` / `git restore --staged -- paths` |
 | Everything | *Stage All* / *Unstage All* | `stageAll()` / `unstageAll()` | `git add .` / unstage `.` |
-| Folder | folder row button (tree view) | `stage` / `unstage` with every file below it | same as files |
+| Folder | folder row button, context menu, **Space** on the selected folder (tree view) | `stage` / `unstage` with every file below it | same as files |
+| Discard a folder | folder row button or context menu → *Discard Changes in Folder…* (Changes side only) | `discard(_:)` with every file below it | `git restore` / `git clean` (after a confirmation) |
 | One hunk | *Stage Hunk* / *Unstage Hunk* on the `@@` row | `applyHunk(_:of:)` | `git apply --cached [--reverse]` with a one-hunk patch |
 | Selected lines | *Stage Lines* bar, **Space** in the diff | `applyLines(_:in:of:)` | `git apply --cached [--reverse]` with a partial patch |
 | Discard lines | *Discard Lines…* | `discardLines(_:in:of:)` | reverse patch applied to the work tree |
@@ -21,7 +22,8 @@ A renamed file needs **both** paths to unstage (`ChangesModel.unstage(_ change:)
 
 * **File list** (`ChangesSidebar.toggleStage`): acts on every selected row. Rows in *Changes* are staged, rows in
   *Staged* are unstaged, in one call each. Afterwards `picked` moves to the rows' new side so a second Space
-  undoes the first.
+  undoes the first. A selected folder row (`ChangeSelection.isFolder`) stands for every changed file below it
+  (`selectedFiles()`); selecting a folder does not change the diff on screen.
 * **Diff** (`ChangesDetailView.stageSelectedLines`, wired through `DiffContentView.onSpace` →
   `DiffNSTableView.onSpace`): if lines are selected and they sit in one hunk, stage those lines; otherwise stage or
   unstage the **whole file**.

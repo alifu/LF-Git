@@ -120,8 +120,8 @@ struct ChangesSidebar: View {
     /// One selected file shows its diff; several are kept for staging them together.
     private func pick(_ selection: Set<ChangeSelection>) {
         picked = selection
-        if selection.count == 1 {
-            Task { await changes.select(selection.first) }
+        if selection.count == 1, let only = selection.first, !only.isFolder {
+            Task { await changes.select(only) }
         } else if selection.isEmpty {
             Task { await changes.select(nil) }
         }
@@ -133,9 +133,20 @@ struct ChangesSidebar: View {
         if !picked.contains(selection) { picked = [selection] }
     }
 
-    /// Stages the selected unstaged files and unstages the selected staged ones.
+    /// The selected files, with every file below a selected folder, each once.
+    private func selectedFiles() -> [(ChangeSelection, GitChange)] {
+        var seen = Set<ChangeSelection>()
+        let files = picked.flatMap { selection -> [(ChangeSelection, GitChange)] in
+            guard selection.isFolder else { return changes.change(for: selection).map { [(selection, $0)] } ?? [] }
+            return (selection.staged ? staged : unstaged).filter { $0.path.hasPrefix(selection.path) }
+                .map { (ChangeSelection(path: $0.path, staged: selection.staged), $0) }
+        }
+        return files.filter { seen.insert($0.0).inserted }
+    }
+
+    /// Stages the selected unstaged files and unstages the selected staged ones; a selected folder stands for its files.
     private func toggleStage() -> KeyPress.Result {
-        let targets = picked.compactMap { selection in changes.change(for: selection).map { (selection, $0) } }
+        let targets = selectedFiles()
         guard !targets.isEmpty else { return .ignored }
         let toStage = targets.filter { !$0.0.staged }.map(\.1.path)
         let toUnstage = targets.filter(\.0.staged).flatMap { [$0.1.path] + ($0.1.originalPath.map { [$0] } ?? []) }
@@ -173,6 +184,7 @@ private struct ChangeTreeRows: View {
                 } label: {
                     folderLabel(node)
                 }
+                .tag(ChangeSelection(path: node.id, staged: isStaged, isFolder: true))
             }
         }
     }
@@ -185,30 +197,43 @@ private struct ChangeTreeRows: View {
         })
     }
 
+    private func toggle(_ files: [GitChange]) {
+        app.run {
+            if isStaged {
+                try await repository.changes.unstage(files.flatMap { [$0.path] + ($0.originalPath.map { [$0] } ?? []) })
+            } else {
+                try await repository.changes.stage(files.map(\.path))
+            }
+        }
+    }
+
     private func folderLabel(_ node: PathNode<GitChange>) -> some View {
         let files = node.items
         return HStack(spacing: 6) {
             Image(systemName: "folder").foregroundStyle(.theme(.textSubtle))
             Text(node.name).lineLimit(1).truncationMode(.middle)
+                .accessibilityIdentifier("folder-\(isStaged ? "staged" : "unstaged")-\(node.id)")
             Text("\(files.count)").font(.caption.monospacedDigit()).foregroundStyle(.theme(.textSubtle))
             Spacer(minLength: 4)
-            Button {
-                app.run {
-                    if isStaged {
-                        try await repository.changes.unstage(files.flatMap { [$0.path] + ($0.originalPath.map { [$0] } ?? []) })
-                    } else {
-                        try await repository.changes.stage(files.map(\.path))
-                    }
-                }
-            } label: {
+            Button { toggle(files) } label: {
                 Image(systemName: isStaged ? "minus.circle" : "plus.circle")
             }
             .buttonStyle(.borderless)
-            .help(isStaged ? "Unstage every file in \(node.name)" : "Stage every file in \(node.name)")
+            .help(isStaged ? "Unstage every file in \(node.name) (Space)" : "Stage every file in \(node.name) (Space)")
             .accessibilityIdentifier("\(isStaged ? "unstage" : "stage")-folder-\(node.id)")
+            if !isStaged {
+                Button { discarding = files } label: { Image(systemName: "arrow.uturn.backward.circle") }
+                    .buttonStyle(.borderless)
+                    .help("Discard the changes to every file in \(node.name)")
+                    .accessibilityIdentifier("discard-folder-\(node.id)")
+            }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("folder-\(isStaged ? "staged" : "unstaged")-\(node.id)")
+        .contextMenu {
+            Button(isStaged ? "Unstage Folder" : "Stage Folder") { toggle(files) }
+            if !isStaged {
+                Button("Discard Changes in Folder…", role: .destructive) { discarding = files }
+            }
+        }
     }
 }
 
