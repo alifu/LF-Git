@@ -18,6 +18,30 @@ struct GitBranchTests {
         #expect(branches.allSatisfy { !$0.isRemote })
     }
 
+    @Test("a branch knows how far it is ahead of and behind its upstream")
+    func aheadBehind() throws {
+        let fixture = try GitFixture()
+        try fixture.commit("a.txt", "1\n")
+        _ = try fixture.addOrigin()
+        let client = GitClient(directory: fixture.directory)
+        try fixture.git.run(["push", "-u", "origin", "main"])
+        let level = try #require(try client.branches().first { $0.name == "main" && !$0.isRemote })
+        #expect(level.ahead == 0)
+        #expect(level.behind == 0)
+
+        try fixture.commit("b.txt", "2\n")
+        try fixture.commit("c.txt", "3\n")
+        let main = try #require(try client.branches().first { $0.name == "main" && !$0.isRemote })
+        #expect(main.ahead == 2)
+        #expect(main.behind == 0)
+
+        try fixture.git.run(["push", "origin", "main"])
+        try fixture.git.run(["reset", "--hard", "HEAD~2"])
+        let behind = try #require(try client.branches().first { $0.name == "main" && !$0.isRemote })
+        #expect(behind.ahead == 0)
+        #expect(behind.behind == 2)
+    }
+
     @Test("create, switch and delete")
     func lifecycle() throws {
         let fixture = try GitFixture()

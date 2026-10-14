@@ -56,6 +56,9 @@ public struct GitBranch: Sendable, Equatable, Identifiable {
     public let isRemote: Bool
     public let upstream: String?
     public let tip: String
+    /// Commits only here (to push) and only on the upstream (to pull), as of the last fetch. Zero without an upstream.
+    public var ahead = 0
+    public var behind = 0
 
     public var id: String { (isRemote ? "remote:" : "local:") + name }
 }
@@ -165,19 +168,32 @@ public struct GitClient: Sendable {
     // MARK: - Branches
 
     public func branches() throws -> [GitBranch] {
-        let format = "%(refname)%1f%(HEAD)%1f%(upstream:short)%1f%(objectname:short)"
+        let format = "%(refname)%1f%(HEAD)%1f%(upstream:short)%1f%(objectname:short)%1f%(upstream:track,nobracket)"
         let result = try git.run(["for-each-ref", "--format=\(format)", "refs/heads", "refs/remotes"])
         var branches: [GitBranch] = []
         for line in String(decoding: result.stdout, as: UTF8.self).split(separator: "\n") {
             let fields = line.split(separator: "\u{1F}", omittingEmptySubsequences: false).map(String.init)
-            guard fields.count == 4 else { continue }
+            guard fields.count == 5 else { continue }
             let isRemote = fields[0].hasPrefix("refs/remotes/")
             let name = String(fields[0].dropFirst(isRemote ? "refs/remotes/".count : "refs/heads/".count))
             if isRemote && name.hasSuffix("/HEAD") { continue }
+            let track = Self.parseTrack(fields[4])
             branches.append(GitBranch(name: name, isCurrent: fields[1] == "*", isRemote: isRemote,
-                                      upstream: fields[2].isEmpty ? nil : fields[2], tip: fields[3]))
+                                      upstream: fields[2].isEmpty ? nil : fields[2], tip: fields[3],
+                                      ahead: track.ahead, behind: track.behind))
         }
         return branches
+    }
+
+    /// Reads git's `ahead 2, behind 1` (also `ahead 2`, `behind 1`, `gone`, or empty when level).
+    static func parseTrack(_ text: String) -> (ahead: Int, behind: Int) {
+        var result = (ahead: 0, behind: 0)
+        for part in text.split(separator: ",") {
+            let words = part.split(separator: " ")
+            guard words.count == 2, let count = Int(words[1]) else { continue }
+            if words[0] == "ahead" { result.ahead = count } else if words[0] == "behind" { result.behind = count }
+        }
+        return result
     }
 
     /// Switches to a local branch, or creates a tracking branch from a remote one (`origin/feature`).
