@@ -104,17 +104,16 @@ public struct GitClient: Sendable {
     // MARK: - Staging
 
     public func stage(_ paths: [String]) throws {
-        guard !paths.isEmpty else { return }
-        try git.run(["add", "--"] + paths)
+        try git.runBatched(["add", "--"], paths: paths)
     }
 
     public func unstage(_ paths: [String]) throws {
         guard !paths.isEmpty else { return }
         if try hasCommits() {
-            try git.run(["restore", "--staged", "--"] + paths)
+            try git.runBatched(["restore", "--staged", "--"], paths: paths)
         } else {
             // -f: a file edited after it was added differs from both the index and HEAD, which plain rm refuses.
-            try git.run(["rm", "--cached", "-r", "-q", "-f", "--"] + paths)
+            try git.runBatched(["rm", "--cached", "-r", "-q", "-f", "--"], paths: paths)
         }
     }
 
@@ -123,10 +122,10 @@ public struct GitClient: Sendable {
         let tracked = changes.filter { $0.kind != .untracked && $0.isUnstaged }.map(\.path)
         let untracked = changes.filter { $0.kind == .untracked }.map(\.path)
         if !tracked.isEmpty {
-            try git.run(["restore", "--"] + tracked)
+            try git.runBatched(["restore", "--"], paths: tracked)
         }
         if !untracked.isEmpty {
-            try git.run(["clean", "-f", "-d", "-q", "--"] + untracked)
+            try git.runBatched(["clean", "-f", "-d", "-q", "--"], paths: untracked)
         }
     }
 

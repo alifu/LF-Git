@@ -93,6 +93,37 @@ public struct Git: Sendable {
         return result
     }
 
+    /// Bytes of path arguments per git process. The OS refuses a command line over `ARG_MAX` (1 MB on macOS, shared
+    /// with the environment), and launching then fails outright, so a folder with tens of thousands of changed
+    /// files must reach git in several runs.
+    public static let pathBatchBytes = 128 * 1024
+
+    /// Splits `paths` into runs that each fit a command line.
+    public static func batches(of paths: [String], maxBytes: Int = pathBatchBytes) -> [[String]] {
+        var result: [[String]] = []
+        var current: [String] = []
+        var currentBytes = 0
+        for path in paths {
+            let size = path.utf8.count + 1
+            if !current.isEmpty, currentBytes + size > maxBytes {
+                result.append(current)
+                current = []
+                currentBytes = 0
+            }
+            current.append(path)
+            currentBytes += size
+        }
+        if !current.isEmpty { result.append(current) }
+        return result
+    }
+
+    /// Runs `prefix` followed by `paths`, in as many git processes as the command-line limit requires.
+    public func runBatched(_ prefix: [String], paths: [String]) throws(GitError) {
+        for batch in Self.batches(of: paths) {
+            try run(prefix + batch)
+        }
+    }
+
     private func execute(_ arguments: [String], stdin: Data?, outputFile: URL?, environment: [String: String],
                          timeout: TimeInterval?, cancellation: GitCancellation?,
                          literalPathspecs: Bool) throws(GitError) -> GitResult {
@@ -216,8 +247,7 @@ public struct Git: Sendable {
     }
 
     public func stage(_ paths: [String]) throws(GitError) {
-        guard !paths.isEmpty else { return }
-        try run(["add", "--"] + paths)
+        try runBatched(["add", "--"], paths: paths)
     }
 
     public enum Side: String, Sendable {

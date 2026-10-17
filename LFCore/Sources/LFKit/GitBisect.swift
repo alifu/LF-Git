@@ -104,7 +104,7 @@ extension GitClient {
         let tracked = try paths.filter {
             try git.run(["ls-files", "--error-unmatch", "--", $0], allowedStatuses: [0, 1]).status == 0
         }
-        if !tracked.isEmpty { try git.run(["rm", "--cached", "-r", "-q", "--"] + tracked) }
+        try git.runBatched(["rm", "--cached", "-r", "-q", "--"], paths: tracked)
     }
 
     static func escapedIgnorePattern(_ path: String) -> String {

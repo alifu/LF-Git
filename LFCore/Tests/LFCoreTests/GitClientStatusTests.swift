@@ -174,6 +174,37 @@ struct GitStagingTests {
         #expect(try client.status().isClean)
     }
 
+    @Test("batches split paths so no command line exceeds the byte budget")
+    func pathBatches() {
+        let paths = (0..<1000).map { "dir/file-\($0).txt" }
+
+        let batches = Git.batches(of: paths, maxBytes: 1000)
+
+        #expect(batches.count > 1)
+        #expect(batches.flatMap { $0 } == paths)
+        let sizes: [Int] = batches.map { batch in batch.map { $0.utf8.count + 1 }.reduce(0, +) }
+        #expect(sizes.allSatisfy { $0 <= 1000 })
+        #expect(Git.batches(of: [], maxBytes: 1000).isEmpty)
+    }
+
+    @Test("staging and discarding a folder of 20000 untracked files does not overflow the command line")
+    func hugeFolder() throws {
+        let fixture = try GitFixture()
+        try fixture.commit("a.txt", "one\n")
+        let names = (0..<20_000).map { "big/\(String(repeating: "n", count: 40))-\($0).txt" }
+        try FileManager.default.createDirectory(atPath: fixture.sandbox.path("big"), withIntermediateDirectories: true)
+        for name in names { fixture.sandbox.write(name, "x\n") }
+        let client = GitClient(directory: fixture.directory)
+
+        try client.stage(names)
+        #expect(try client.status().staged.count == names.count)
+        try client.unstage(names)
+        #expect(try client.status().staged.isEmpty)
+        try client.discard(try client.status().unstaged)
+
+        #expect(try client.status().isClean)
+    }
+
     @Test("commit records the staged changes and returns the short hash")
     func commit() throws {
         let fixture = try GitFixture()

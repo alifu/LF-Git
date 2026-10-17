@@ -342,13 +342,18 @@ final class LazygitUITests: GitUITestCase {
         app.typeKey(",", modifierFlags: .command)
 
         let window = app.windows["Settings"].exists ? app.windows["Settings"] : app.windows.element(boundBy: 0)
-        XCTAssertTrue(app.textFields["settings-name"].waitForExistence(timeout: 10), "Account is the first tab")
-        for tab in ["Network", "Environment", "Theme"] {
-            XCTAssertTrue(app.buttons[tab].exists || app.radioButtons[tab].exists, "\(tab) tab exists")
+        // macOS reopens Settings on the tab used last, so the tab is chosen here instead of assumed.
+        func tab(_ title: String) -> XCUIElement {
+            app.buttons[title].exists ? app.buttons[title] : app.radioButtons[title]
         }
-        (app.buttons["Network"].exists ? app.buttons["Network"] : app.radioButtons["Network"]).click()
+        for title in ["Account", "Network", "Environment", "Theme"] {
+            XCTAssertTrue(tab(title).waitForExistence(timeout: 10), "\(title) tab exists")
+        }
+        tab("Account").click()
+        XCTAssertTrue(app.textFields["settings-name"].waitForExistence(timeout: 10), "the Account tab edits the commit author")
+        tab("Network").click()
         XCTAssertTrue(item(app, "settings-ssl").waitForExistence(timeout: 5))
-        (app.buttons["Theme"].exists ? app.buttons["Theme"] : app.radioButtons["Theme"]).click()
+        tab("Theme").click()
         XCTAssertTrue(item(app, "settings-dark").waitForExistence(timeout: 5))
         attachScreenshot(app, named: "settings-theme")
         _ = window
