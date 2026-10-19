@@ -46,6 +46,26 @@ struct PathTreeTests {
         #expect(tree[1].items == ["top.txt"])
     }
 
+    @Test("a folder knows how many items are below it without walking them")
+    func itemCounts() {
+        let tree = build(["src/a.swift", "src/sub/b.swift", "top.txt"])
+
+        #expect(tree[0].itemCount == 2)
+        #expect(tree[1].itemCount == 1)
+    }
+
+    @Test("a hundred thousand files in one folder build quickly")
+    func hugeFolder() {
+        let paths = (0..<100_000).map { "build/generated/file\($0).txt" }
+        let started = ContinuousClock.now
+
+        let tree = build(paths)
+
+        #expect(tree.count == 1)
+        #expect(tree[0].itemCount == 100_000)
+        #expect(ContinuousClock.now - started < .seconds(5))
+    }
+
     @Test("folder ids are unique per level, so collapsing one leaves its namesake open")
     func uniqueIDs() {
         let tree = build(["a/x/1.txt", "a/x/2.txt", "b/x/1.txt", "b/x/2.txt"])

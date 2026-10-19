@@ -94,6 +94,7 @@ struct PendingConfirmation: Identifiable {
 nonisolated struct RepositorySnapshot: Sendable {
     let files: [ConflictedFile]
     let status: GitStatus
+    let listing: ChangeListing
     let branches: [GitBranch]
     let operation: GitOperation?
     let stashes: [GitStash]
@@ -124,6 +125,8 @@ final class RepositoryModel {
     private(set) var files: [ConflictedFile] = []
     var selection: ConflictedFile.ID?
     private(set) var status = GitStatus()
+    /// `status` split into staged and unstaged files with their folder trees, ready for the Changes list.
+    private(set) var changeListing = ChangeListing.empty
     private(set) var branches: [GitBranch] = []
     private(set) var operation: GitOperation?
     private(set) var stashes: [GitStash] = []
@@ -255,6 +258,7 @@ final class RepositoryModel {
             guard generation == refreshGeneration else { return }
             files = snapshot.files
             status = snapshot.status
+            changeListing = snapshot.listing
             branches = snapshot.branches
             operation = snapshot.operation
             stashes = snapshot.stashes
@@ -430,8 +434,9 @@ final class RepositoryModel {
     nonisolated private static func snapshot(root: URL) async throws -> RepositorySnapshot {
         let client = GitClient(directory: root)
         let hasSubmodules = FileManager.default.fileExists(atPath: root.appendingPathComponent(".gitmodules").path)
+        let status = try client.status()
         return RepositorySnapshot(
-            files: try scan(root: root), status: try client.status(), branches: try client.branches(),
+            files: try scan(root: root), status: status, listing: ChangeListing(status: status), branches: try client.branches(),
             operation: try client.operation(), stashes: try client.stashes(), tags: try client.tags(),
             remotes: try client.remotes(), reflog: try client.reflog(maxCount: 200),
             worktrees: try client.worktrees(), submodules: hasSubmodules ? try client.submodules() : [],

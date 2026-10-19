@@ -14,8 +14,8 @@ struct ChangesSidebar: View {
     @AppStorage("changes.showsTree") private var showsTree = true
 
     private var changes: ChangesModel { repository.changes }
-    private var staged: [GitChange] { repository.status.staged }
-    private var unstaged: [GitChange] { repository.status.unstaged }
+    private var staged: [GitChange] { repository.changeListing.staged }
+    private var unstaged: [GitChange] { repository.changeListing.unstaged }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,12 +41,12 @@ struct ChangesSidebar: View {
                         .listRowSeparator(.hidden)
                 }
                 if !staged.isEmpty {
-                    section("Staged", key: "section:staged", changes: staged, isStaged: true, action: "Unstage All") {
+                    section("Staged", key: "section:staged", changes: staged, tree: repository.changeListing.stagedTree, isStaged: true, action: "Unstage All") {
                         app.run { try await changes.unstageAll() }
                     }
                 }
                 if !unstaged.isEmpty {
-                    section("Changes", key: "section:unstaged", changes: unstaged, isStaged: false, action: "Stage All") {
+                    section("Changes", key: "section:unstaged", changes: unstaged, tree: repository.changeListing.unstagedTree, isStaged: false, action: "Stage All") {
                         app.run { try await changes.stageAll() }
                     }
                 }
@@ -74,14 +74,14 @@ struct ChangesSidebar: View {
 
     // MARK: - Sections
 
-    private func section(_ title: String, key: String, changes list: [GitChange], isStaged: Bool, action: String,
+    private func section(_ title: String, key: String, changes list: [GitChange], tree: [PathNode<GitChange>], isStaged: Bool, action: String,
                          perform: @escaping () -> Void) -> some View {
         Section(isExpanded: expansion(key)) {
             if showsTree {
-                ChangeTreeRows(nodes: PathNode.build(list, path: \.path), isStaged: isStaged, repository: repository, app: app,
+                ChangeTreeRows(nodes: tree, isStaged: isStaged, repository: repository, app: app,
                                discarding: $discarding, collapsed: $collapsed)
             } else {
-                ForEach(list) { change in
+                CappedRows(items: list) { change in
                     ChangeRow(change: change, staged: isStaged, showsFolder: true, app: app, repository: repository, discarding: $discarding)
                         .tag(ChangeSelection(path: change.path, staged: isStaged))
                         .id(ChangeSelection(path: change.path, staged: isStaged))
@@ -111,8 +111,8 @@ struct ChangesSidebar: View {
             nodes.filter(\.isFolder).flatMap { [prefix + $0.id] + folders($0.children ?? [], prefix: prefix) }
         }
         return ["section:staged", "section:unstaged"]
-            + (showsTree ? folders(PathNode.build(staged, path: \.path), prefix: "staged:")
-                + folders(PathNode.build(unstaged, path: \.path), prefix: "unstaged:") : [])
+            + (showsTree ? folders(repository.changeListing.stagedTree, prefix: "staged:")
+                + folders(repository.changeListing.unstagedTree, prefix: "unstaged:") : [])
     }
 
     // MARK: - Selection and the space key
@@ -170,7 +170,7 @@ private struct ChangeTreeRows: View {
     @Binding var collapsed: Set<String>
 
     var body: some View {
-        ForEach(nodes) { node in
+        CappedRows(items: nodes) { node in
             if let change = node.item {
                 ChangeRow(change: change, staged: isStaged, showsFolder: false, app: app, repository: repository, discarding: $discarding)
                     .tag(ChangeSelection(path: change.path, staged: isStaged))
@@ -208,31 +208,51 @@ private struct ChangeTreeRows: View {
     }
 
     private func folderLabel(_ node: PathNode<GitChange>) -> some View {
-        let files = node.items
-        return HStack(spacing: 6) {
+        HStack(spacing: 6) {
             Image(systemName: "folder").foregroundStyle(.theme(.textSubtle))
             Text(node.name).lineLimit(1).truncationMode(.middle)
                 .accessibilityIdentifier("folder-\(isStaged ? "staged" : "unstaged")-\(node.id)")
-            Text("\(files.count)").font(.caption.monospacedDigit()).foregroundStyle(.theme(.textSubtle))
+            Text("\(node.itemCount)").font(.caption.monospacedDigit()).foregroundStyle(.theme(.textSubtle))
             Spacer(minLength: 4)
-            Button { toggle(files) } label: {
+            Button { toggle(node.items) } label: {
                 Image(systemName: isStaged ? "minus.circle" : "plus.circle")
             }
             .buttonStyle(.borderless)
             .help(isStaged ? "Unstage every file in \(node.name) (Space)" : "Stage every file in \(node.name) (Space)")
             .accessibilityIdentifier("\(isStaged ? "unstage" : "stage")-folder-\(node.id)")
             if !isStaged {
-                Button { discarding = files } label: { Image(systemName: "arrow.uturn.backward.circle") }
+                Button { discarding = node.items } label: { Image(systemName: "arrow.uturn.backward.circle") }
                     .buttonStyle(.borderless)
                     .help("Discard the changes to every file in \(node.name)")
                     .accessibilityIdentifier("discard-folder-\(node.id)")
             }
         }
         .contextMenu {
-            Button(isStaged ? "Unstage Folder" : "Stage Folder") { toggle(files) }
+            Button(isStaged ? "Unstage Folder" : "Stage Folder") { toggle(node.items) }
             if !isStaged {
-                Button("Discard Changes in Folder…", role: .destructive) { discarding = files }
+                Button("Discard Changes in Folder…", role: .destructive) { discarding = node.items }
             }
+        }
+    }
+}
+
+/// Rows of a long list, a page at a time. A List asked to hold tens of thousands of rows at once stops responding,
+/// so the rest waits behind a "Show more" row.
+private struct CappedRows<Item: Identifiable, Row: View>: View {
+    private static var pageSize: Int { 500 }
+
+    let items: [Item]
+    @ViewBuilder let row: (Item) -> Row
+    @State private var shown = pageSize
+
+    var body: some View {
+        ForEach(items.prefix(shown)) { row($0) }
+        if items.count > shown {
+            Button("Show \(min(Self.pageSize, items.count - shown)) more · \(items.count - shown) hidden") {
+                shown += Self.pageSize
+            }
+            .buttonStyle(.link)
+            .font(.caption)
         }
     }
 }

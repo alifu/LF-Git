@@ -11,7 +11,18 @@ nonisolated struct PathNode<Item>: Identifiable {
     /// Set for a folder.
     let children: [PathNode]?
 
+    /// How many items sit at or below this node; kept so a folder row need not walk its subtree to show a count.
+    let itemCount: Int
+
     var isFolder: Bool { children != nil }
+
+    init(id: String, name: String, item: Item?, children: [PathNode]?) {
+        self.id = id
+        self.name = name
+        self.item = item
+        self.children = children
+        itemCount = item == nil ? (children ?? []).reduce(0) { $0 + $1.itemCount } : 1
+    }
 
     /// Every item at or below this node, in list order.
     var items: [Item] {
@@ -46,7 +57,7 @@ nonisolated struct PathNode<Item>: Identifiable {
                 folders[first, default: []].append(Entry(path: entry.path, parts: entry.parts.dropFirst(), item: entry.item))
             }
         }
-        let names = folders.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        let names = folders.keys.sorted(by: Self.nameOrder(count: folders.count))
         var folderNodes: [PathNode] = []
         for name in names {
             let id = prefix + name + "/"
@@ -57,6 +68,17 @@ nonisolated struct PathNode<Item>: Identifiable {
                 folderNodes.append(PathNode(id: id, name: name, item: nil, children: children))
             }
         }
-        return folderNodes + leaves.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        let leafOrder = Self.nameOrder(count: leaves.count)
+        return folderNodes + leaves.sorted { leafOrder($0.name, $1.name) }
+    }
+
+    /// Above this many siblings the locale-aware comparison (about a thousand times slower than a byte comparison)
+    /// would take seconds, so the order falls back to plain code-point order.
+    private static var largeLevel: Int { 2_000 }
+
+    private static func nameOrder(count: Int) -> (String, String) -> Bool {
+        count > largeLevel ? { $0 < $1 } : { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 }
+
+extension PathNode: Sendable where Item: Sendable {}
