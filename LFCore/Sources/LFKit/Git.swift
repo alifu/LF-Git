@@ -74,18 +74,21 @@ public struct Git: Sendable {
     ///     output (a diff of a million lines) never has to fit in memory.
     ///   - timeout: stop the command (`GitError.timedOut`) if it runs longer than this many seconds.
     ///   - cancellation: lets another thread stop the command (`GitError.cancelled`).
+    ///   - onStandardError: receives git's error output while the command runs (progress of a clone, for instance).
     ///   - literalPathspecs: treat paths as plain names. A few commands (`git stash`) use magic pathspecs
     ///     such as `:/` themselves and need this off; their callers then write `:(literal)name` explicitly.
     @discardableResult
     public func run(_ arguments: [String], stdin: Data? = nil, outputFile: URL? = nil, environment: [String: String] = [:],
                     allowedStatuses: Set<Int32> = [0], timeout: TimeInterval? = nil,
-                    cancellation: GitCancellation? = nil, literalPathspecs: Bool = true) throws(GitError) -> GitResult {
+                    cancellation: GitCancellation? = nil, onStandardError: (@Sendable (String) -> Void)? = nil,
+                    literalPathspecs: Bool = true) throws(GitError) -> GitResult {
         let started = Date()
         var status: Int32 = -1
         defer { log?.record(arguments: arguments, status: status, duration: Date().timeIntervalSince(started)) }
         if cancellation?.isCancelled == true { throw .cancelled }
         let result = try execute(arguments, stdin: stdin, outputFile: outputFile, environment: environment,
-                                 timeout: timeout, cancellation: cancellation, literalPathspecs: literalPathspecs)
+                                 timeout: timeout, cancellation: cancellation, onStandardError: onStandardError,
+                                 literalPathspecs: literalPathspecs)
         status = result.status
         guard allowedStatuses.contains(result.status) else {
             throw .failed(arguments: arguments, status: result.status, stderr: result.stderr)
@@ -126,7 +129,7 @@ public struct Git: Sendable {
 
     private func execute(_ arguments: [String], stdin: Data?, outputFile: URL?, environment: [String: String],
                          timeout: TimeInterval?, cancellation: GitCancellation?,
-                         literalPathspecs: Bool) throws(GitError) -> GitResult {
+                         onStandardError: (@Sendable (String) -> Void)?, literalPathspecs: Bool) throws(GitError) -> GitResult {
         let scratch = FileManager.default.temporaryDirectory
         let errorFile = scratch.appendingPathComponent("lfgit-git-\(UUID().uuidString).err")
         // Output goes to a file, never a pipe: a pipe stays open as long as any child of git (ssh, a hook)
@@ -188,7 +191,9 @@ public struct Git: Sendable {
         }
         let cancelKey = cancellation?.onCancel { stopper.stop(.cancelled) }
         let timer = timeout.map { seconds in Watchdog(after: seconds) { stopper.stop(.timedOut(seconds: seconds)) } }
+        let tailer = onStandardError.map { StandardErrorTailer(file: errorFile, deliver: $0) }
         process.waitUntilExit()
+        tailer?.finish()
         timer?.cancel()
         if let cancelKey { cancellation?.remove(cancelKey) }
 
