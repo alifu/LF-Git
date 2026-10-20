@@ -1,7 +1,7 @@
 class Lfgit < Formula
   desc "Merge tool and Git client for conflicts in files of any size"
   homepage "https://github.com/alifu/LF-Git"
-  url "https://github.com/alifu/LF-Git/archive/refs/tags/v0.2.3.tar.gz"
+  url "https://github.com/alifu/LF-Git/archive/refs/tags/v0.3.0.tar.gz"
   sha256 "5b37230834f76c429a8c2e310f73afada1468278167cde95c0745934e72dd11c"
   license "MIT"
   head "https://github.com/alifu/LF-Git.git", branch: "main"
