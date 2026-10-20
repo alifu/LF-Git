@@ -6,6 +6,9 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
+            GeneralSettingsTab()
+                .tabItem { Label("General", systemImage: "gearshape") }
+                .accessibilityIdentifier("settings-tab-general")
             AccountSettingsTab(git: git)
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
                 .accessibilityIdentifier("settings-tab-account")
@@ -21,6 +24,21 @@ struct SettingsView: View {
         }
         .frame(width: 520, height: 470)
         .onAppear { git.load() }
+    }
+}
+
+/// Behaviour of the app itself.
+struct GeneralSettingsTab: View {
+    @AppStorage(AppModel.reopenLastKey) private var reopensLastRepository = true
+
+    var body: some View {
+        Form {
+            Section("Startup") {
+                Toggle("Reopen the last repository when the app starts", isOn: $reopensLastRepository)
+                    .accessibilityIdentifier("settings-reopen-last")
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

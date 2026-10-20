@@ -220,6 +220,15 @@ final class RepositoryModel {
         watcher = nil
     }
 
+    /// Ends the model's work before the window lets go of it: stops the watcher and the running command, and makes
+    /// a refresh that is still in flight drop its result instead of writing into a repository nobody sees.
+    func shutDown() {
+        stopWatching()
+        activeCancellation?.cancel()
+        refreshGeneration += 1
+        isLoading = false
+    }
+
     deinit {
         if let logObserver { commandLog.stopObserving(logObserver) }
     }

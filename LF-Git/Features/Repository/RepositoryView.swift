@@ -56,6 +56,11 @@ struct RepositoryView: View {
                 }
                 .help("Command palette (⌘K)")
                 .accessibilityIdentifier("palette-button")
+                Button { app.close() } label: {
+                    Label("Close Repository", systemImage: "xmark.square")
+                }
+                .help("Close this repository and go back to the dashboard (⇧⌘W)")
+                .accessibilityIdentifier("close-repository-button")
             }
         }
         .focusedSceneValue(\.repositoryModel, repository)

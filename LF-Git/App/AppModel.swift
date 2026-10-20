@@ -9,9 +9,29 @@ final class AppModel {
     var errorMessage: String?
     private var appliedLaunchArguments = false
     private static let recentsKey = "recentRepositories"
-    private static let recentsLimit = 10
+    private static let lastOpenedKey = "lastOpenedRepository"
+    static let reopenLastKey = "reopenLastRepository"
+    /// Launch argument that starts on the dashboard whatever was open last (the UI tests pass it).
+    static let noRestoreArgument = "-LFNoRestore"
+    private static let recentsLimit = 20
+    private let defaults: UserDefaults
     /// Paths of repositories opened lately, newest first.
-    private(set) var recentRepositories: [String] = UserDefaults.standard.stringArray(forKey: recentsKey) ?? []
+    private(set) var recentRepositories: [String]
+    /// The repository that was open when the app last had one open; nil after it was closed on purpose.
+    private(set) var lastOpenedRepository: String?
+    /// Set when the last repository could not be reopened, for the dashboard to explain.
+    private(set) var restoreNote: String?
+    /// The clone sheet is shown; the menu, the dashboard and the palette all set this.
+    var showsClone = false
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        recentRepositories = defaults.stringArray(forKey: Self.recentsKey) ?? []
+        lastOpenedRepository = defaults.string(forKey: Self.lastOpenedKey)
+    }
+
+    /// Whether the last repository comes back at launch (on unless the user turned it off).
+    var reopensLastRepository: Bool { defaults.object(forKey: Self.reopenLastKey) as? Bool ?? true }
 
     /// Opens `url` (any folder inside a repository) and selects `file` when given.
     func open(_ url: URL, selecting file: String? = nil) {
@@ -22,7 +42,9 @@ final class AppModel {
         guard confirmDiscardingUnsavedWork() else { return }
         do {
             let model = try RepositoryModel.open(at: url)
+            repository?.shutDown()
             repository = model
+            restoreNote = nil
             remember(model.root)
             Task {
                 await model.refresh()
@@ -41,12 +63,49 @@ final class AppModel {
         guard !path.hasPrefix(FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path), !path.hasPrefix("/private/var/folders"),
               !path.hasPrefix("/var/folders") else { return }
         recentRepositories = Array(([path] + recentRepositories.filter { $0 != path }).prefix(Self.recentsLimit))
-        UserDefaults.standard.set(recentRepositories, forKey: Self.recentsKey)
+        defaults.set(recentRepositories, forKey: Self.recentsKey)
+        lastOpenedRepository = path
+        defaults.set(path, forKey: Self.lastOpenedKey)
     }
 
     func clearRecentRepositories() {
         recentRepositories = []
-        UserDefaults.standard.removeObject(forKey: Self.recentsKey)
+        defaults.removeObject(forKey: Self.recentsKey)
+        forgetLastOpened()
+    }
+
+    func removeFromRecents(_ path: String) {
+        recentRepositories = recentRepositories.filter { $0 != path }
+        defaults.set(recentRepositories, forKey: Self.recentsKey)
+        if lastOpenedRepository == path { forgetLastOpened() }
+    }
+
+    private func forgetLastOpened() {
+        lastOpenedRepository = nil
+        defaults.removeObject(forKey: Self.lastOpenedKey)
+    }
+
+    /// Closes the open repository and returns to the dashboard. False when the user chose to keep working.
+    @discardableResult
+    func close() -> Bool {
+        guard let repository, confirmDiscardingUnsavedWork() else { return repository == nil }
+        repository.shutDown()
+        self.repository = nil
+        forgetLastOpened()
+        return true
+    }
+
+    /// Opens the repository that was open last, if the user wants that and it is still there.
+    func restoreLastRepository(arguments: [String]) {
+        guard repository == nil, reopensLastRepository, !arguments.contains(Self.noRestoreArgument),
+              let path = lastOpenedRepository else { return }
+        let url = URL(fileURLWithPath: path)
+        guard (try? RepositoryModel.open(at: url)) != nil else {
+            restoreNote = "\(url.lastPathComponent) is no longer at \(url.deletingLastPathComponent().path)."
+            removeFromRecents(path)
+            return
+        }
+        open(url)
     }
 
     /// Runs an action and shows what went wrong. A command the user cancelled is not a problem.
@@ -77,7 +136,9 @@ final class AppModel {
     func applyLaunchArgumentsOnce(_ arguments: [String]) {
         guard !appliedLaunchArguments else { return }
         appliedLaunchArguments = true
-        apply(LaunchOptions.parse(arguments))
+        let options = LaunchOptions.parse(arguments)
+        apply(options)
+        if options.repository == nil { restoreLastRepository(arguments: arguments) }
     }
 
     func handle(_ url: URL) {

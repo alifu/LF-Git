@@ -174,7 +174,8 @@ final class ConflictResolutionUITests: XCTestCase {
 
     func testLinkOpensRepositoryInRunningApp() throws {
         let app = XCUIApplication()
-        app.launch() // no arguments: the welcome screen
+        app.launchArguments = ["-LFNoRestore"]
+        app.launch() // the dashboard: nothing is reopened
         XCTAssertTrue(app.buttons["open-repository"].waitForExistence(timeout: 10))
 
         var link = URLComponents()

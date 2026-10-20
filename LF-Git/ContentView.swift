@@ -8,10 +8,13 @@ struct ContentView: View {
             if let repository = app.repository {
                 RepositoryView(repository: repository, app: app)
             } else {
-                WelcomeView(onOpen: app.chooseRepository)
+                DashboardView(app: app)
             }
         }
         .frame(minWidth: 760, minHeight: 480)
+        .sheet(isPresented: Binding(get: { app.showsClone }, set: { app.showsClone = $0 })) {
+            CloneSheet(app: app)
+        }
         .alert("Something went wrong", isPresented: Binding(
             get: { app.errorMessage != nil },
             set: { if !$0 { app.errorMessage = nil } }

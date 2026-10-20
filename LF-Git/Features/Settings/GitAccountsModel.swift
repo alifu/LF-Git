@@ -28,19 +28,34 @@ final class GitAccountsModel {
     }
 
     func add() {
+        if remember(host: host, username: username, password: password) {
+            host = ""
+            username = ""
+            password = ""
+        }
+    }
+
+    /// Keeps a login in git's credential helper and lists it. False (with `message` set) when that failed.
+    @discardableResult
+    func remember(host: String, username: String, password: String) -> Bool {
         let account = GitAccount(host: GitCredentials.canonicalHost(Self.normalized(host)), username: username.trimmingCharacters(in: .whitespaces))
         do {
             try credentials.ensureHelper()
             try credentials.save(account, password: password)
             accounts = accounts.filter { $0.id != account.id } + [account]
             persist()
-            host = ""
-            username = ""
-            password = ""
             report("Saved \(account.id) in your git credential helper.")
+            return true
         } catch {
             report(error.localizedDescription, isError: true)
+            return false
         }
+    }
+
+    /// The saved login for a server, to pre-fill a sign-in form.
+    func account(forHost host: String) -> GitAccount? {
+        let key = GitCredentials.canonicalHost(Self.normalized(host))
+        return accounts.first { GitCredentials.canonicalHost($0.host) == key }
     }
 
     func remove(_ account: GitAccount) {

@@ -10,6 +10,12 @@ struct AppCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("Open Repository…") { app.chooseRepository() }
                 .keyboardShortcut("o")
+            Button("Clone Repository…") { app.showsClone = true }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+                .disabled(app.repository != nil)
+            Button("Close Repository") { app.close() }
+                .keyboardShortcut("w", modifiers: [.command, .shift])
+                .disabled(app.repository == nil)
             Menu("Open Recent") {
                 ForEach(app.recentRepositories, id: \.self) { path in
                     Button(path) { app.open(URL(fileURLWithPath: path)) }

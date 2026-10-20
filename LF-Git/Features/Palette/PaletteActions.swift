@@ -58,6 +58,7 @@ extension RepositoryModel {
         git("bisect-reset", "Stop Bisecting", symbol: "stop.circle", enabled: isBisecting) { try await self.resetBisect() }
         actions.append(PaletteAction(id: "command-log", title: "Show or Hide the Log Panel", symbol: "terminal", hint: "⇧⌘L") { [self] in showsLogPanel.toggle() })
         actions.append(PaletteAction(id: "help", title: "Keyboard Shortcuts", symbol: "keyboard", hint: "⌘/") { [self] in showsHelp = true })
+        actions.append(PaletteAction(id: "close-repository", title: "Close Repository", symbol: "xmark.square", hint: "⇧⌘W") { app.close() })
         actions += customCommandActions(app: app)
         return actions
     }

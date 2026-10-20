@@ -12,6 +12,7 @@ the [top-level README](../README.md); these pages are for people changing the co
 | [branches-and-history.md](branches-and-history.md) | branch lists, search, ahead/behind badges, branch menu, history, confirmations |
 | [conflict-editor.md](conflict-editor.md) | the conflict table, choices, Edit box, copy, binary files |
 | [engine.md](engine.md) | `LFCore` (C engine), `LFKit` (git client), `lfgit` CLI |
+| [clone-and-dashboard.md](clone-and-dashboard.md) | cloning from a URL, VPN wait and sign-in, reopening and closing a repository, the dashboard |
 | [shell-ui.md](shell-ui.md) | section ribbon, toolbar, command palette, shortcuts, dialogs |
 | [testing.md](testing.md) | which tests cover what, how to run them, known quirks |
 
@@ -32,6 +33,10 @@ the [top-level README](../README.md); these pages are for people changing the co
 | the toolbar branch menu and its search | `Repository/RepositoryToolbar.swift` → `BranchMenu` |
 | "Are you sure?" dialogs | `RepositoryModel+Actions.swift`, `Branches/BranchContextMenu.swift`, `History/CommitContextMenu.swift` |
 | the ribbon | `Repository/SectionRibbon.swift` |
+| the clone sheet and its states | `Clone/CloneModel.swift`, `Clone/CloneSheet.swift` |
+| `git clone` / `ls-remote` | `LFKit/GitClone.swift` |
+| the dashboard and its recent list | `Welcome/DashboardView.swift`, `RepositorySummary.swift` |
+| reopening or closing a repository | `App/AppModel.swift` → `restoreLastRepository`, `close` |
 | accepting current / incoming / both | `Editor/EditorModel.swift` → `resolve`, `resolveAll` |
 | the Edit box | `Editor/EditConflictView.swift`, `EditorModel.edit` |
 | image / PDF conflicts | `Editor/BinaryFileView.swift`, `BinaryPreview.swift`, `BinaryVersion.swift` |
