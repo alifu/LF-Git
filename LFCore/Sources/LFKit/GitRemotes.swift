@@ -9,6 +9,14 @@ public struct GitRemote: Sendable, Equatable, Identifiable {
 }
 
 extension GitClient {
+    /// When this repository last fetched (any remote, from any tool): the time `FETCH_HEAD` was written, or nil if it never fetched.
+    public func lastFetchDate() throws -> Date? {
+        let path = try git.run(["rev-parse", "--git-path", "FETCH_HEAD"]).text
+        let url = path.hasPrefix("/") ? URL(fileURLWithPath: path) : git.directory.appendingPathComponent(path)
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return attributes?[.modificationDate] as? Date
+    }
+
     public func remotes() throws -> [GitRemote] {
         var fetch: [String: String] = [:]
         var push: [String: String] = [:]

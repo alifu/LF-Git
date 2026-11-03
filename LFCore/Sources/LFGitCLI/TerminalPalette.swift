@@ -30,8 +30,8 @@ public struct TerminalPalette: Sendable, Equatable {
         Entry(role: "incoming", token: "minimapIncoming", light: "#357DE8", dark: "#4688EC"),
         Entry(role: "base", token: "syntaxKeyword", light: "#964AC0", dark: "#D8A0F7"),
         Entry(role: "danger", token: "danger", light: "#C9372C", dark: "#F87168"),
-        Entry(role: "accent", token: "accent", light: "#1F845A", dark: "#4BCE97"),
-        Entry(role: "muted", token: "textSubtle", light: "#6B6E76", dark: "#96999E"),
+        Entry(role: "accent", token: "accent", light: "#178080", dark: "#25B1B1"),
+        Entry(role: "muted", token: "textSubtle", light: "#70655E", dark: "#AAA29D"),
     ]
 
     public let current: RGB

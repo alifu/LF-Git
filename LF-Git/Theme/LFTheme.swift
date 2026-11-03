@@ -3,13 +3,13 @@ import SwiftUI
 
 // Views use semantic tokens only — never raw colors. Hex values live in Design/theme.json.
 
-/// Which accent color the user picked in Settings > Theme. Green is the default.
+/// Which accent color the user picked in Settings > Theme. Teal is the default.
 enum AccentSetting {
     static let storageKey = "accentColor"
 
-    /// Unknown or missing stored values fall back to green.
+    /// Unknown or missing stored values fall back to teal.
     static func choice(storedValue: String?) -> LFAccentChoice {
-        storedValue.flatMap(LFAccentChoice.init(rawValue:)) ?? .green
+        storedValue.flatMap(LFAccentChoice.init(rawValue:)) ?? .teal
     }
 
     static var current: LFAccentChoice {

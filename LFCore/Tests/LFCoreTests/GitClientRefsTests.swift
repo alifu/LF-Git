@@ -75,6 +75,22 @@ struct GitClientRefsTests {
 
     // MARK: Remotes
 
+    @Test("the last fetch time is nil before any fetch and recent after one")
+    func lastFetchDate() throws {
+        let fixture = try GitFixture()
+        try fixture.commit("a.txt", "1\n")
+        _ = try fixture.addOrigin()
+        let client = GitClient(directory: fixture.directory)
+        #expect(try client.lastFetchDate() == nil)
+
+        let before = Date().addingTimeInterval(-2)
+        try client.fetch()
+
+        let fetched = try #require(try client.lastFetchDate())
+        #expect(fetched >= before)
+        #expect(fetched <= Date().addingTimeInterval(2))
+    }
+
     @Test("remotes are added, renamed, re-pointed and removed")
     func remotes() throws {
         let fixture = try GitFixture()

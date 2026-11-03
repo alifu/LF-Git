@@ -105,6 +105,7 @@ nonisolated struct RepositorySnapshot: Sendable {
     let submodules: [GitSubmodule]
     let isBisecting: Bool
     let bisectCandidate: String?
+    let lastFetchDate: Date?
 }
 
 /// The repository opened in the window: git state, conflicted files and the actions on whole files.
@@ -135,6 +136,8 @@ final class RepositoryModel {
     private(set) var reflog: [GitReflogEntry] = []
     private(set) var worktrees: [GitWorktree] = []
     private(set) var submodules: [GitSubmodule] = []
+    /// When the repository last fetched, from the app or anywhere else; nil if it never did.
+    private(set) var lastFetchDate: Date?
     /// Everything that happened in this window, newest last: git commands, actions and problems.
     private(set) var activity: [LogEvent] = []
     private var activityCounter = 0
@@ -278,6 +281,7 @@ final class RepositoryModel {
             submodules = snapshot.submodules
             isBisecting = snapshot.isBisecting
             bisectCandidate = snapshot.bisectCandidate
+            lastFetchDate = snapshot.lastFetchDate
             lastError = nil
             if !hasChosenSection {
                 hasChosenSection = true
@@ -449,7 +453,8 @@ final class RepositoryModel {
             operation: try client.operation(), stashes: try client.stashes(), tags: try client.tags(),
             remotes: try client.remotes(), reflog: try client.reflog(maxCount: 200),
             worktrees: try client.worktrees(), submodules: hasSubmodules ? try client.submodules() : [],
-            isBisecting: try client.isBisecting(), bisectCandidate: try client.bisectCandidate()
+            isBisecting: try client.isBisecting(), bisectCandidate: try client.bisectCandidate(),
+            lastFetchDate: try client.lastFetchDate()
         )
     }
 

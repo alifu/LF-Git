@@ -199,19 +199,20 @@ final class LazygitUITests: GitUITestCase {
         XCTAssertTrue(waitUntil { (try? self.git("diff", "--cached", "--name-only")) == "" })
     }
 
-    func testRibbonMinimizesAndStillSwitchesSections() throws {
+    func testSideMenuSwitchesEverySectionAndHidesConflictsWhenNone() throws {
         try commitHistory("base")
         let app = launch(appearance: "light")
         XCTAssertTrue(item(app, "section-Changes").waitForExistence(timeout: 10))
-        XCTAssertTrue(item(app, "section-Branches").exists, "the expanded ribbon shows every section")
+        XCTAssertFalse(item(app, "section-Conflicts").exists, "Conflicts only shows while files are conflicted")
 
-        item(app, "ribbon-toggle").click()
-        XCTAssertTrue(item(app, "section-History").waitForExistence(timeout: 5), "the minimized ribbon keeps small buttons")
-        item(app, "section-Branches").click()
-        XCTAssertTrue(item(app, "branches-list").waitForExistence(timeout: 10), "a small button switches the section")
+        for (section, list) in [("Branches", "branches-list"), ("History", "history-list"), ("Tags", "tags-list")] {
+            item(app, "section-\(section)").click()
+            XCTAssertTrue(item(app, list).waitForExistence(timeout: 10), "\(section) opens from the side menu")
+            XCTAssertTrue(item(app, "section-\(section)").isSelected, "\(section) is marked as selected")
+        }
 
-        item(app, "ribbon-toggle").click()
-        XCTAssertTrue(item(app, "section-Tags").waitForExistence(timeout: 5))
+        item(app, "log-button").click()
+        XCTAssertTrue(item(app, "command-log").waitForExistence(timeout: 5), "the side menu opens the log panel")
     }
 
     func testChangesFoldersCollapseAndExpand() throws {

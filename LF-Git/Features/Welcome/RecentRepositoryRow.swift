@@ -40,7 +40,8 @@ struct RecentRepositoryRow: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 10)
-        .background(.theme(.surfaceRaised), in: RoundedRectangle(cornerRadius: 8))
+        .background(.theme(.background), in: RoundedRectangle(cornerRadius: Chrome.tileRadius))
+        .overlay(RoundedRectangle(cornerRadius: Chrome.tileRadius).strokeBorder(.theme(.border)))
         .contentShape(RoundedRectangle(cornerRadius: 8))
         .onTapGesture(count: prominent ? 2 : 1) { if !isMissing { app.open(url) } }
         .contextMenu {

@@ -103,7 +103,9 @@ struct RemotesDetail: View {
                     .emptyOverlay(branches.isEmpty, "No fetched branches", symbol: "cloud")
                 }
             } else {
-                ContentUnavailableView("Select a remote", systemImage: "externaldrive.connected.to.line.below")
+                EmptyPane("Select a remote", symbol: "externaldrive.connected.to.line.below",
+                          message: "Choose a remote to see its fetched branches.")
+                    .background(DotGridBackground())
             }
         }
         .background(.theme(.background))

@@ -106,7 +106,8 @@ struct CommitViewerDetail: View {
 
     var body: some View {
         if repository.commitViewer.selectedCommit == nil {
-            ContentUnavailableView(emptyTitle, systemImage: "doc.text.magnifyingglass").background(.theme(.background))
+            EmptyPane(emptyTitle, symbol: "doc.text.magnifyingglass", message: "Its changes show here.")
+                .background(DotGridBackground())
         } else {
             HistoryDetailView(repository: repository, app: app, model: repository.commitViewer)
         }

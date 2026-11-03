@@ -2,7 +2,7 @@
 
 /// Semantic color tokens. Each case names a light/dark color set in Assets.xcassets/Theme.
 enum LFThemeToken: String, CaseIterable, Sendable {
-    /// Primary buttons, focus ring, selection
+    /// Primary buttons, focus ring, selection (filled buttons carry onAccent text)
     case accent = "lfAccent"
     /// Hover/pressed primary
     case accentHover = "lfAccentHover"
@@ -14,14 +14,20 @@ enum LFThemeToken: String, CaseIterable, Sendable {
     case lineSelection = "lfLineSelection"
     /// Links, resolved labels
     case accentText = "lfAccentText"
-    /// Window and editor background
+    /// Decorative accent: side-menu marker, avatar (never behind text)
+    case accentVivid = "lfAccentVivid"
+    /// Cards and editors: the list card, diff, conflict editor
     case background = "lfBackground"
-    /// Sidebar, gutter
+    /// Window chrome: side menu, toolbar, dotted canvas, card headers, gutter
     case surfaceSunken = "lfSurfaceSunken"
-    /// Popovers, cards, toolbar
+    /// Popovers, selected side-menu tile, pill hover
     case surfaceRaised = "lfSurfaceRaised"
-    /// Dividers, pane borders
+    /// Card, pill and pane borders
     case border = "lfBorder"
+    /// Canvas dot grid, placeholder icons (decorative)
+    case borderStrong = "lfBorderStrong"
+    /// Icon of the selected side-menu tile
+    case railSelectedIcon = "lfRailSelectedIcon"
     /// Body text, code
     case text = "lfText"
     /// Secondary labels, line numbers
@@ -72,22 +78,22 @@ enum LFThemeToken: String, CaseIterable, Sendable {
 
 /// The accent colors the user can pick in Settings. The first is the default; its colors are the base tokens.
 enum LFAccentChoice: String, CaseIterable, Sendable {
+    case teal
     case green
     case blue
     case purple
-    case teal
     case orange
 
     /// The tokens a choice replaces; every other token is the same whatever the choice.
-    static let overriddenTokens: Set<LFThemeToken> = [.accent, .accentHover, .accentSubtle, .accentText]
+    static let overriddenTokens: Set<LFThemeToken> = [.accent, .accentHover, .accentSubtle, .accentText, .accentVivid]
 
     /// Added to the base color set's name to get this choice's color set (empty for the default).
     var assetSuffix: String {
         switch self {
-        case .green: ""
+        case .teal: ""
+        case .green: "Green"
         case .blue: "Blue"
         case .purple: "Purple"
-        case .teal: "Teal"
         case .orange: "Orange"
         }
     }

@@ -13,6 +13,14 @@ extension RepositoryModel {
 
     // MARK: Asking first
 
+    /// Asks for a name, then creates a branch at the current commit and switches to it.
+    func requestNewBranch(app: AppModel) {
+        ask(PendingPrompt(title: "New Branch", message: "Created from the current commit and switched to.",
+                          placeholder: "Branch name", confirmTitle: "Create") { name in
+            app.run { try await self.createBranch(name.trimmingCharacters(in: .whitespaces)) }
+        })
+    }
+
     /// Pulls. Merge and rebase change the branch in ways a fast-forward does not, so they say what will happen and wait for a yes.
     func requestPull(_ strategy: PullStrategy, app: AppModel) {
         let branch = status.branch ?? "the current branch"

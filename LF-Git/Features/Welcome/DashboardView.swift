@@ -44,7 +44,7 @@ struct DashboardView: View {
         .padding(28)
         .frame(maxWidth: 900, maxHeight: .infinity, alignment: .topLeading)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.theme(.background))
+        .background(.theme(.surfaceSunken))
         .task(id: app.recentRepositories) { await summaries.refresh(app.recentRepositories) }
     }
 
@@ -59,7 +59,7 @@ struct DashboardView: View {
                     .accessibilityHidden(true)
                 Text("LF-Git")
                     .font(.largeTitle.weight(.semibold))
-                    .foregroundStyle(.theme(.accentText))
+                    .foregroundStyle(.theme(.text))
             }
             Text("Resolve conflicts in files of any size, including Xcode project files.")
                 .foregroundStyle(.theme(.textSubtle))
@@ -179,8 +179,8 @@ private struct ActionCard: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.theme(.surfaceRaised), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(.theme(.border)))
+            .background(.theme(.background), in: RoundedRectangle(cornerRadius: Chrome.cardRadius))
+            .overlay(RoundedRectangle(cornerRadius: Chrome.cardRadius).strokeBorder(.theme(.border)))
             .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)

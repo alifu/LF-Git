@@ -1,36 +1,45 @@
-# The window shell: ribbon, toolbar, palette, shortcuts
+# The window shell: side menu, cards, toolbar, palette, shortcuts
 
 ## Layout (`Repository/RepositoryView.swift`)
 
 ```
-VStack
- ├─ SectionRibbon                      (full width)
+HStack (window color: surfaceSunken)
+ ├─ SectionRail                        (side menu, fixed width)
  └─ NavigationSplitView
-      ├─ sidebar  → the list for repository.section (Changes, Branches, …, Conflicts)
-      └─ detail   → the matching detail, with OperationBanner / BisectBanner on top
- + log panel (bottom inset), toolbar, dialogs (RepositoryDialogs)
+      ├─ sidebar  → CardHeader + the list for repository.section, in a white card (.lfCard())
+      └─ detail   → the matching detail in a card, with OperationBanner / BisectBanner on top
+ + log panel (bottom inset, a card), toolbar pills, dialogs (RepositoryDialogs)
 ```
 
 `repository.section` (`RepositorySection`, defined in `RepositoryModel.swift`) selects what both columns show.
+The look follows the "Clean Plate" design (see README › Design credits); the plan is `plan/side-menu-redesign.plan.md`.
 
-## Section ribbon (`Repository/SectionRibbon.swift`)
+## Side menu (`Repository/SectionRail.swift`)
 
-Office-2007 style. **Main**: Changes and History as big buttons; **Browse**: the other sections as medium
-buttons in columns of three; a vertical rule between the groups; captions underneath.
+* `SideMenuSections(hasConflicts:selected:)` decides the order: Changes, Branches, History, a rule, then Stash, Tags,
+  Remotes, Reflog, Worktrees, Submodules, and Conflicts **only while files are conflicted or it is selected**.
+* `SideMenuTile` is a 34 pt outlined tile; selected, it is raised (`surfaceRaised`) with the icon in
+  `railSelectedIcon`, and an `accentVivid` mark on the window edge follows it (`matchedGeometryEffect`).
+  Counts come from `RepositoryModel.badgeCount(for:)` (changes, stashes, conflicted files), shared with `CardHeader`.
+* The sections scroll when the window is short; the bottom group (log panel, Settings, Git account) stays put.
+  The account button opens Settings on the Account tab (`SettingsTab`, `@AppStorage("settings.tab")`).
+* Identifiers: container `section-picker`, tiles `section-<Name>`, bottom `log-button`, `settings-button`,
+  `account-button`. UI tests switch sections with `showSection(_:in:)` in `GitUITestCase.swift`.
 
-* `WrappingLayout` (private `Layout`) fills the width offered and wraps groups to a new row, left aligned.
-* `RibbonButton` has three sizes (`big`, `medium`, `small`); the whole frame is clickable (`contentShape`).
-  Counts come from `count(_:)` (changes, stashes, conflicted files).
-* Minimize: double-click the *Repository* tab or the arrow at the bottom right; minimized, the tab strip shows one
-  small button per section. State: `@AppStorage("ribbon.isCollapsed")`.
-* Identifiers: container `section-picker`, buttons `section-<Name>`, tab `ribbon-tab`, arrow `ribbon-toggle`.
-  UI tests switch sections with `showSection(_:in:)` in `GitUITestCase.swift`.
+## Cards and pills (`Repository/CardStyle.swift`, `Repository/ToolbarPills.swift`)
+
+`Chrome` holds the radii and gutter. `.lfCard()` (white, radius 10, hairline border), `CardHeader`, `CountCapsule`,
+`DotGridBackground` (the canvas behind empty panes) and `EmptyPane`. `PillButtonStyle` (`.pill`, `.prominentPill`),
+`.pillChrome()` for menus, and `PillGroup` + `PillDivider` for joined pills.
 
 ## Toolbar (`Repository/RepositoryToolbar.swift`)
 
-`BranchMenu` (popover with search), `RemoteButtons` (progress + Cancel, copied-commits menu, Fetch, Pull menu,
-Push menu with ahead/behind counts), Reload, Log, Commands. `OperationBanner` (a stopped merge/rebase/cherry-pick: Continue, Skip, Abort) is in `RepositoryToolbar.swift`;
-`BisectBanner` is in `RepositoryDialogs.swift`.
+Navigation: `RemoteButtons`: upstream │ last fetch (`RepositoryModel.lastFetchDate`, from `FETCH_HEAD`; click to
+fetch, or progress + Cancel while busy), the copied-commits menu, a prominent **"N upstream commits"** pill (pull,
+fast-forward only) while behind, and the Push menu with the ahead count. Centre: `ProjectMenu` (recent repositories,
+open, close) joined to `BranchMenu` (popover with search). Trailing: New branch (⌘B, `requestNewBranch`), Commands
+(⌘K), Close. `OperationBanner` (a stopped merge/rebase/cherry-pick: Continue, Skip, Abort) is in
+`RepositoryToolbar.swift`; `BisectBanner` is in `RepositoryDialogs.swift`.
 
 ## Command palette (`Palette/PaletteActions.swift`)
 

@@ -7,8 +7,6 @@ struct BranchMenu: View {
     let app: AppModel
     @State private var isOpen = false
     @State private var query = ""
-    @State private var creating = false
-    @State private var newName = ""
     @State private var deleting: GitBranch?
     @FocusState private var searchFocused: Bool
 
@@ -23,10 +21,14 @@ struct BranchMenu: View {
     var body: some View {
         Button { isOpen.toggle() } label: {
             // An explicit HStack: toolbar Labels show only their icon.
-            HStack(spacing: 4) {
-                Image(systemName: "arrow.triangle.branch")
-                Text(repository.status.branch ?? "Detached HEAD").lineLimit(1)
-                Image(systemName: "chevron.down").font(.caption2)
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.triangle.branch").foregroundStyle(.theme(.textSubtle))
+                Text(repository.status.branch ?? "Detached HEAD")
+                    .foregroundStyle(.theme(.textSubtle))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 180)
+                Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.theme(.textSubtle))
             }
         }
         .help("Switch or create a branch")
@@ -35,13 +37,6 @@ struct BranchMenu: View {
         .popover(isPresented: $isOpen, arrowEdge: .bottom) { popover }
         .onChange(of: isOpen) { _, open in
             if open { query = "" }
-        }
-        .alert("New Branch", isPresented: $creating) {
-            TextField("Branch name", text: $newName)
-            Button("Create") { run { try await repository.createBranch(newName.trimmingCharacters(in: .whitespaces)) } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Created from the current commit and switched to.")
         }
         .confirmationDialog(
             "Delete \(deleting?.name ?? "branch")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -84,8 +79,7 @@ struct BranchMenu: View {
             HStack {
                 Button("New Branch…") {
                     isOpen = false
-                    newName = ""
-                    creating = true
+                    repository.requestNewBranch(app: app)
                 }
                 .accessibilityIdentifier("branch-menu-new")
                 Spacer()
@@ -136,84 +130,194 @@ struct BranchMenu: View {
     }
 }
 
-/// Fetch, pull and push, with how far ahead or behind the branch is.
+/// Fetch, pull and push as top-bar pills: the upstream and when it was last fetched, a filled call to action while
+/// the remote has commits this branch lacks, and push with how many commits are waiting.
 struct RemoteButtons: View {
     let repository: RepositoryModel
     let app: AppModel
 
+    private static let fetchClockInterval: TimeInterval = 30
+
+    private var isIdle: Bool { !repository.isBusy && repository.operation == nil }
+
     var body: some View {
-        HStack(spacing: 4) {
-            if let title = repository.busyTitle {
-                ProgressView().controlSize(.small)
-                Text(title).font(.caption).foregroundStyle(.theme(.textSubtle))
-                if repository.isCancellable {
-                    Button("Cancel") { repository.cancelBusy() }
-                        .help("Stop the running command")
-                        .accessibilityIdentifier("cancel-operation")
+        HStack(spacing: 8) {
+            PillGroup {
+                remoteMenu
+                PillDivider()
+                if let title = repository.busyTitle {
+                    busySegment(title)
+                } else {
+                    fetchButton
                 }
             }
-            Group {
-            if !repository.copiedCommits.isEmpty {
-                Menu {
-                    Button("Paste (Cherry-Pick)…") { repository.requestPaste(app: app) }
-                    Button("Clear") { repository.clearCopiedCommits() }
-                } label: {
-                    Label("\(repository.copiedCommits.count)", systemImage: "doc.on.clipboard")
-                }
-                .help("\(repository.copiedCommits.count) commit(s) copied for cherry-pick")
-                .accessibilityIdentifier("copied-commits")
-            }
-            Button { run { try await repository.fetch() } } label: {
-                Label("Fetch", systemImage: "arrow.triangle.2.circlepath")
-            }
-            .help("Fetch from the remote (⌥⌘F)")
-            .accessibilityIdentifier("fetch")
-            Menu {
-                Button("Pull (fast-forward only)") { run { try await repository.pull(.fastForwardOnly) } }
-                Button("Pull and merge…") { repository.requestPull(.merge, app: app) }
-                Button("Pull and rebase…") { repository.requestPull(.rebase, app: app) }
-            } label: {
-                countLabel("arrow.down", repository.status.behind, name: "Pull")
-            } primaryAction: {
-                run { try await repository.pull(.fastForwardOnly) }
-            }
-            .help("Pull (⌥⌘L)")
-            .accessibilityIdentifier("pull")
-            Menu {
-                Button("Push") { run { try await repository.push() } }
-                Button("Force Push (with lease)…") {
-                    repository.confirm(PendingConfirmation(
-                        title: "Force push \(repository.status.branch ?? "this branch")?",
-                        message: "The remote branch is overwritten, unless somebody else pushed to it since your last fetch.",
-                        confirmTitle: "Force Push") { run { try await repository.push(force: true) } })
-                }
-            } label: {
-                countLabel("arrow.up", repository.status.ahead, name: "Push")
-            } primaryAction: {
-                run { try await repository.push() }
-            }
-            .help(repository.status.upstream == nil ? "Publish this branch (⌥⌘P)" : "Push (⌥⌘P)")
-            .accessibilityIdentifier("push")
-            }
-            .disabled(repository.isBusy || repository.operation != nil)
+            if !repository.copiedCommits.isEmpty { copiedCommits }
+            if repository.status.behind > 0 { upstreamButton }
+            pushMenu
         }
     }
 
-    /// The arrow, with how many commits are waiting next to it.
-    private func countLabel(_ symbol: String, _ count: Int, name: String) -> some View {
-        HStack(spacing: 2) {
-            Image(systemName: symbol)
-            if count > 0 {
-                Text("\(count)").font(.caption.monospacedDigit().weight(.semibold))
+    private var remoteName: String {
+        if let upstream = repository.status.upstream { return upstream }
+        return repository.remotes.isEmpty ? "No remote" : "Not published"
+    }
+
+    private var remoteMenu: some View {
+        Menu {
+            Button("Fetch") { run { try await repository.fetch() } }
+            Divider()
+            Button("Pull (fast-forward only)") { run { try await repository.pull(.fastForwardOnly) } }
+            Button("Pull and merge…") { repository.requestPull(.merge, app: app) }
+            Button("Pull and rebase…") { repository.requestPull(.rebase, app: app) }
+            Divider()
+            Button("Reload") { Task { await repository.refresh(reloadDiffs: true) } }
+        } label: {
+            Label(remoteName, systemImage: "dot.radiowaves.left.and.right")
+                .foregroundStyle(.theme(.textSubtle))
+        }
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .padding(.horizontal, 10)
+        .disabled(!isIdle)
+        .help("Fetch, pull or reload")
+        .accessibilityIdentifier("remote-menu")
+    }
+
+    private var fetchButton: some View {
+        Button { run { try await repository.fetch() } } label: {
+            TimelineView(.periodic(from: .now, by: Self.fetchClockInterval)) { context in
+                Label(Self.fetchedText(repository.lastFetchDate, now: context.date), systemImage: "arrow.triangle.2.circlepath")
             }
         }
+        .disabled(!isIdle)
+        .help("Fetch from the remote (⌥⌘F)")
+        .accessibilityLabel("Fetch")
+        .accessibilityIdentifier("fetch")
+    }
+
+    private func busySegment(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            ProgressView().controlSize(.small)
+            Text(title).foregroundStyle(.theme(.textSubtle)).lineLimit(1)
+            if repository.isCancellable {
+                Button("Cancel") { repository.cancelBusy() }
+                    .help("Stop the running command")
+                    .accessibilityIdentifier("cancel-operation")
+            }
+        }
+        .padding(.trailing, repository.isCancellable ? 0 : 10)
+        .padding(.leading, 10)
+    }
+
+    /// "3 upstream commits": pulls (fast-forward only) in one click.
+    private var upstreamButton: some View {
+        let behind = repository.status.behind
+        return Button("\(behind) upstream commit\(behind == 1 ? "" : "s")") {
+            run { try await repository.pull(.fastForwardOnly) }
+        }
+        .buttonStyle(.prominentPill)
+        .disabled(!isIdle)
+        .help("Pull them (fast-forward only, ⌥⌘L)")
+        .accessibilityIdentifier("pull")
+    }
+
+    private var copiedCommits: some View {
+        Menu {
+            Button("Paste (Cherry-Pick)…") { repository.requestPaste(app: app) }
+            Button("Clear") { repository.clearCopiedCommits() }
+        } label: {
+            Label("\(repository.copiedCommits.count)", systemImage: "doc.on.clipboard")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .pillChrome()
+        .disabled(!isIdle)
+        .help("\(repository.copiedCommits.count) commit(s) copied for cherry-pick")
+        .accessibilityIdentifier("copied-commits")
+    }
+
+    private var pushMenu: some View {
+        Menu {
+            Button("Push") { run { try await repository.push() } }
+            Button("Force Push (with lease)…") {
+                repository.confirm(PendingConfirmation(
+                    title: "Force push \(repository.status.branch ?? "this branch")?",
+                    message: "The remote branch is overwritten, unless somebody else pushed to it since your last fetch.",
+                    confirmTitle: "Force Push") { run { try await repository.push(force: true) } })
+            }
+        } label: {
+            countLabel("arrow.up", repository.status.ahead, name: "Push")
+        } primaryAction: {
+            run { try await repository.push() }
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .pillChrome()
+        .disabled(!isIdle)
+        .help(repository.status.upstream == nil ? "Publish this branch (⌥⌘P)" : "Push (⌥⌘P)")
+        .accessibilityIdentifier("push")
+    }
+
+    /// "Push", with how many commits are waiting next to it.
+    private func countLabel(_ symbol: String, _ count: Int, name: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+            Text(name)
+            if count > 0 { CountCapsule(count: count) }
+        }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(count > 0 ? "\(name), \(count) commits" : name)
     }
 
+    /// "Never fetched", "Just now" or "5 min ago".
+    static func fetchedText(_ date: Date?, now: Date) -> String {
+        guard let date else { return "Never fetched" }
+        if now.timeIntervalSince(date) < 60 { return "Just now" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: now)
+    }
+
     private func run(_ work: @escaping () async throws -> Void) {
-        Task {
-            do { try await work() } catch { app.report(error) }
+        app.run(work)
+    }
+}
+
+/// The open repository's name; the menu switches to a recent one, opens another or closes this one.
+struct ProjectMenu: View {
+    let repository: RepositoryModel
+    let app: AppModel
+
+    private var others: [String] {
+        app.recentRepositories.filter { $0 != repository.root.standardizedFileURL.path }
+    }
+
+    var body: some View {
+        Menu {
+            if !others.isEmpty {
+                Section("Recent") {
+                    ForEach(others, id: \.self) { path in
+                        Button(URL(fileURLWithPath: path).lastPathComponent) { app.open(URL(fileURLWithPath: path)) }
+                            .help(path)
+                    }
+                }
+            }
+            Button("Open Repository…") { app.chooseRepository() }
+            Button("Close Repository") { app.close() }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "book.closed")
+                Text(repository.name).fontWeight(.medium).lineLimit(1).truncationMode(.middle).frame(maxWidth: 180)
+                Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.theme(.textSubtle))
+            }
+            .foregroundStyle(.theme(.text))
         }
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .padding(.horizontal, 10)
+        .help(repository.root.path)
+        .accessibilityIdentifier("project-menu")
     }
 }
 

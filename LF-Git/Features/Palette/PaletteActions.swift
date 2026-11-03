@@ -54,6 +54,9 @@ extension RepositoryModel {
         git("previous-branch", "Switch to the Previous Branch", symbol: "arrow.uturn.backward", enabled: idle) {
             try await self.perform("Switching…") { client, _ in try client.switchPrevious() }
         }
+        actions.append(PaletteAction(id: "new-branch", title: "New Branch…", symbol: "plus", hint: "⌘B", isEnabled: idle) { [self] in
+            requestNewBranch(app: app)
+        })
         git("reload", "Reload", symbol: "arrow.clockwise", hint: "⌘R") { await self.refresh(reloadDiffs: true) }
         git("bisect-reset", "Stop Bisecting", symbol: "stop.circle", enabled: isBisecting) { try await self.resetBisect() }
         actions.append(PaletteAction(id: "command-log", title: "Show or Hide the Log Panel", symbol: "terminal", hint: "⇧⌘L") { [self] in showsLogPanel.toggle() })
@@ -140,7 +143,7 @@ struct KeyboardHelpView: View {
 
     private static let groups: [(String, [(String, String)])] = [
         ("Everywhere", [("⌘K", "Command palette"), ("⌘/", "This list"), ("⇧⌘L", "Log panel"), ("⌃1 … ⌃0", "Go to a section"),
-                        ("⌘R", "Reload"), ("⌘O", "Open repository"), ("⌥⌘Z", "Undo the last git move (reflog)")]),
+                        ("⌘R", "Reload"), ("⌘B", "New branch"), ("⌘O", "Open repository"), ("⌥⌘Z", "Undo the last git move (reflog)")]),
         ("Remote", [("⌥⌘F", "Fetch"), ("⌥⌘L", "Pull"), ("⌥⌘P", "Push"), ("⎋", "Cancel is in the toolbar while a command runs")]),
         ("Changes", [("⌘↩", "Commit"), ("Click ± on a hunk", "Stage or unstage a hunk"), ("Select lines, then button", "Stage or discard lines")]),
         ("Conflicts", [("⌘1 … ⌘4", "Accept current / incoming / both / base"), ("⌥⌘↓ / ⌥⌘↑", "Next / previous conflict"), ("⌘S", "Save")]),

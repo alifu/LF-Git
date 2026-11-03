@@ -18,10 +18,20 @@ struct ThemeTokenTests {
         #expect(light != dark)
     }
 
-    @Test("accent is Atlassian Green700 in light and Green400 in dark")
+    @Test("accent is the deep Clean Plate teal in light (white text passes) and the bright teal in dark")
     func accentMatchesPalette() {
-        #expect(hex(of: .accent, in: .aqua) == "#1F845A")
-        #expect(hex(of: .accent, in: .darkAqua) == "#4BCE97")
+        #expect(hex(of: .accent, in: .aqua) == "#178080")
+        #expect(hex(of: .accent, in: .darkAqua) == "#25B1B1")
+        #expect(hex(of: .accentVivid, in: .aqua) == "#25B1B1")
+    }
+
+    @Test("window chrome and text use the warm Clean Plate neutrals")
+    func neutralsAreWarm() {
+        #expect(hex(of: .surfaceSunken, in: .aqua) == "#F3F2F1")
+        #expect(hex(of: .surfaceSunken, in: .darkAqua) == "#1C1917")
+        #expect(hex(of: .border, in: .aqua) == "#CAC6C3")
+        #expect(hex(of: .text, in: .aqua) == "#272321")
+        #expect(hex(of: .railSelectedIcon, in: .aqua) == "#D96842")
     }
 
     @Test("current conflict uses Teal, not the green accent")
@@ -30,28 +40,32 @@ struct ThemeTokenTests {
         #expect(hex(of: .conflictCurrentHeader, in: .darkAqua) == "#164555")
     }
 
-    @Test("green is the default accent and uses the base color sets")
-    func greenIsTheDefault() {
-        #expect(AccentSetting.choice(storedValue: nil) == .green)
-        #expect(AccentSetting.choice(storedValue: "nonsense") == .green)
-        #expect(LFThemeToken.accent.assetName(for: .green) == "lfAccent")
+    @Test("teal is the default accent and uses the base color sets")
+    func tealIsTheDefault() {
+        #expect(AccentSetting.choice(storedValue: nil) == .teal)
+        #expect(AccentSetting.choice(storedValue: "nonsense") == .teal)
+        #expect(AccentSetting.choice(storedValue: "green") == .green)
+        #expect(LFThemeToken.accent.assetName(for: .teal) == "lfAccent")
+        #expect(LFAccentChoice.allCases.first == .teal)
     }
 
     @Test("only accent tokens change with the choice")
     func onlyAccentTokensChange() {
         #expect(LFThemeToken.accent.assetName(for: .blue) == "lfAccentBlue")
+        #expect(LFThemeToken.accent.assetName(for: .green) == "lfAccentGreen")
+        #expect(LFThemeToken.accentVivid.assetName(for: .purple) == "lfAccentVividPurple")
         #expect(LFThemeToken.accentSubtle.assetName(for: .orange) == "lfAccentSubtleOrange")
         #expect(LFThemeToken.text.assetName(for: .blue) == "lfText")
         #expect(LFThemeToken.onAccent.assetName(for: .purple) == "lfOnAccent")
     }
 
-    @Test("every accent choice has a color set for every accent token, differing from green", arguments: LFAccentChoice.allCases)
+    @Test("every accent choice has a color set for every accent token, differing from teal", arguments: LFAccentChoice.allCases)
     func choiceHasColors(choice: LFAccentChoice) throws {
         for token in LFAccentChoice.overriddenTokens {
             let name = token.assetName(for: choice)
             #expect(NSColor(named: name) != nil, "missing \(name)")
-            if choice != .green {
-                #expect(hex(named: name, in: .aqua) != hex(named: token.assetName(for: .green), in: .aqua), "\(name) equals green")
+            if choice != .teal {
+                #expect(hex(named: name, in: .aqua) != hex(named: token.assetName(for: .teal), in: .aqua), "\(name) equals teal")
             }
         }
     }

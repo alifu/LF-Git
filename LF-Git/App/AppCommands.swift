@@ -62,6 +62,9 @@ struct AppCommands: Commands {
             Button("Undo Last Git Move") { run { try await $0.undoHeadMove() } }
                 .keyboardShortcut("z", modifiers: [.command, .option])
             Divider()
+            Button("New Branch…") { repository?.requestNewBranch(app: app) }
+                .keyboardShortcut("b")
+                .disabled(repository == nil || repository?.isBusy == true || repository?.operation != nil)
             Button("Fetch") { run { try await $0.fetch() } }
                 .keyboardShortcut("f", modifiers: [.command, .option])
             Button("Pull") { run { try await $0.pull() } }

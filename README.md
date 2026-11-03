@@ -21,11 +21,11 @@ A native macOS merge tool and Git client for resolving conflicts in **files of a
 | ![Branches](docs/images/branches.png) | ![History](docs/images/history.png) |
 | **Branches**: local and remote groups, `feature/…` folders, search, pull/push badges, double-click to check out | **History**: graph, files of a commit, and the diff with blame on its left |
 | ![Branch menu](docs/images/branch-menu.png) | ![Accent color](docs/images/settings-accent.png) |
-| **Branch menu** with search, new and delete | **Settings → Theme**: choose the accent color (green by default) |
+| **Branch menu** with search, new and delete | **Settings → Theme**: choose the accent color (teal by default) |
 
-![Minimized ribbon](docs/images/ribbon-minimized.png)
+![Side menu](docs/images/side-menu.png)
 
-The section ribbon, minimized to one row (double-click the *Repository* tab, or use the arrow at the bottom right). To retake the pictures:
+The side menu on the left, the list and detail cards, and the log panel. To retake the pictures:
 `xcodebuild test -scheme LF-Git -destination 'platform=macOS' -only-testing:LF-GitUITests/ScreenshotTourUITests`, then `Scripts/docs/export-screenshots.sh`.
 
 ## Layout
@@ -57,7 +57,7 @@ xcodebuild -project LF-Git.xcodeproj -scheme LF-Git build
 The window has ten sections, reachable from the grid at the top of the sidebar, with **⌃1 … ⌃0**, or from the
 command palette (**⌘K**): **Changes · Branches · History · Stash · Tags · Remotes · Reflog · Worktrees ·
 Submodules · Conflicts**. Everything runs through your own `git`, so credentials, hooks and signing work as in a
-terminal, and the **log panel** (⇧⌘L, or the terminal button in the toolbar) shows what is happening.
+terminal, and the **log panel** (⇧⌘L, or the terminal button in the side menu) shows what is happening.
 
 | Section | What you can do |
 |---|---|
@@ -72,9 +72,9 @@ terminal, and the **log panel** (⇧⌘L, or the terminal button in the toolbar)
 
 **Confirmations:** merge, rebase, reset, fast-forward, pull-and-merge, pull-and-rebase, cherry-pick, squash, fixup and autosquash first ask, naming what will happen (“Rebase ‘feature’ onto ‘main’?”).
 
-**Ribbon:** the sections sit in a ribbon across the top of the window, like Office 2007: **Changes** and **History** as big buttons, the others as medium ones with counts. Double-click the *Repository* tab or use the arrow to minimize it to one row of small icons; the choice is remembered.
+**Side menu:** the sections are icon tiles down the left of the window: **Changes**, **Branches** and **History** on top, the others below a rule, with counts on the tiles (⌃1 … ⌃0 also switch). **Conflicts** appears only while files are conflicted. The log panel, Settings and the Git account sit at the bottom. The section's list and its detail are two cards beside it.
 
-**Toolbar:** branch menu (a popover with a **search box**: type, press Return to switch to the first match), **Fetch**, **Pull** (fast-forward only, merge or rebase), **Push** (and **force push with
+**Toolbar:** pills for the upstream and when it was last fetched (click to fetch; its menu pulls or reloads), a filled **"N upstream commits"** button that pulls while the branch is behind, Push with the waiting count, the project (switch to a recent repository, open, close) joined to the branch menu (a popover with a **search box**: type, press Return to switch to the first match), **Fetch**, **Pull** (fast-forward only, merge or rebase), **Push** (and **force push with
 lease**) with ahead/behind counts. Fetch, pull, push and other network commands show a **Cancel** button and stop
 by themselves after 5 minutes; git never prompts for a password. A merge, rebase, cherry-pick or revert that stops
 on conflicts shows a banner with **Continue**, **Skip** and **Abort**: resolve the files in Conflicts, save, and
@@ -163,7 +163,8 @@ a conflict, so lists, diffs, the graph and the Conflicts section all show real d
 
 | File | Previews |
 |---|---|
-| `Repository/RepositoryView.swift`, `SectionRibbon.swift` | whole window (light, dark), Conflicts sidebar; the Office-2007-style section ribbon |
+| `Repository/RepositoryView.swift`, `SectionRail.swift` | whole window (light, dark), Conflicts sidebar; the side menu |
+| `Repository/CardStyle.swift`, `ToolbarPills.swift` | cards, card header, dotted canvas, empty panes; toolbar pills |
 | `Repository/RepositoryToolbar.swift`, `RepositoryDialogs.swift` | branch menu, fetch/pull/push, operation banner, bisect banner, message editor |
 | `Changes/ChangesSidebar.swift`, `ChangesViews.swift` | sidebar, commit box, detail |
 | `Branches/`, `History/`, `Stash/`, `Refs/` | each sidebar and detail (branches, commit list, history detail, stash, tags, reflog, remotes, worktrees, submodules) |
@@ -232,7 +233,7 @@ python3 LFCore/Scripts/gen_theme.py          # regenerate + check WCAG AA contra
 python3 LFCore/Scripts/gen_theme.py --check  # CI: fail on drift or low contrast
 ```
 
-**Accent choices** are listed under `accentChoices` in `theme.json`: each one replaces `accent`, `accentHover`, `accentSubtle` and `accentText` with a `[light, dark]` pair of palette colors. The generator writes an extra color set per choice (`lfAccentBlue`, …), checks the same contrast pairs for every choice, and generates `LFAccentChoice`. To add a color, add an entry and rerun the script; the first entry (`green`) is the default and uses the base tokens.
+**Accent choices** are listed under `accentChoices` in `theme.json`: each one replaces `accent`, `accentHover`, `accentSubtle`, `accentText` and `accentVivid` with a `[light, dark]` pair of palette colors. The generator writes an extra color set per choice (`lfAccentBlue`, …), checks the same contrast pairs for every choice, and generates `LFAccentChoice`. To add a color, add an entry and rerun the script; the first entry (`teal`) is the default and uses the base tokens.
 
 ### Test data
 
@@ -300,3 +301,21 @@ Maintainers: see [RELEASING.md](RELEASING.md).
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+### Design credits
+
+The window layout (side menu, card panes, toolbar pills) and the warm-neutral and teal palette are adapted from
+**[GitButler Desktop 3.5](https://www.figma.com/community/file/1681830162435296285/gitbutler-desktop-3-5)** by
+GitButler, published on the Figma Community.
+
+* **Usage rights:** files published to the Figma Community are shared under
+  [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/), which
+  allows copying and adapting the design, commercially too, as long as credit is given, the license is linked, and
+  changes are indicated.
+* **Changes made:** LF-Git uses only the layout and colors. The colors were adjusted to meet WCAG AA contrast (see
+  `Design/theme.json`), a dark palette was derived from them, and LF-Git's own sections, wording and SF Symbols icons
+  are used. No illustrations, logos or GitButler-specific features were copied.
+* **Trademarks:** "GitButler" and its logo belong to their owners. CC BY 4.0 does not cover trademarks, and LF-Git is
+  not affiliated with or endorsed by GitButler.
+
+The MIT license above covers LF-Git's code; it does not relicense the design it adapts.

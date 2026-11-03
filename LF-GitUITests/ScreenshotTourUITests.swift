@@ -63,11 +63,12 @@ final class ScreenshotTourUITests: GitUITestCase {
         Thread.sleep(forTimeInterval: 1.5)
         shot(app, "history")
 
-        // The ribbon, minimized.
-        item(app, "ribbon-toggle").click()
-        Thread.sleep(forTimeInterval: 0.5)
-        shot(app, "ribbon-minimized")
-        item(app, "ribbon-toggle").click()
+        // The side menu with the log panel open, over the History section.
+        showSection("History", in: app)
+        item(app, "log-button").click()
+        Thread.sleep(forTimeInterval: 0.8)
+        shot(app, "side-menu")
+        item(app, "log-button").click()
 
         // The branch menu with search.
         app.buttons["branch-menu"].firstMatch.click()
@@ -84,7 +85,7 @@ final class ScreenshotTourUITests: GitUITestCase {
         item(app, "settings-accent-blue").click()
         Thread.sleep(forTimeInterval: 0.8)
         shot(app, "settings-accent", window: "Settings")
-        item(app, "settings-accent-green").click() // leave the default behind
+        item(app, "settings-accent-teal").click() // leave the default behind
     }
 
     func testTourOfAConflict() throws {

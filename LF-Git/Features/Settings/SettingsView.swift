@@ -1,25 +1,38 @@
 import SwiftUI
 
+/// The tabs of the settings window. The selected one is remembered, so the side menu can open a given tab.
+enum SettingsTab: String {
+    case general, account, network, environment, theme
+
+    static let storageKey = "settings.tab"
+}
+
 /// The settings window: one tab per topic.
 struct SettingsView: View {
     @State private var git = GitSettingsModel()
+    @AppStorage(SettingsTab.storageKey) private var tab = SettingsTab.general.rawValue
 
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             GeneralSettingsTab()
                 .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(SettingsTab.general.rawValue)
                 .accessibilityIdentifier("settings-tab-general")
             AccountSettingsTab(git: git)
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
+                .tag(SettingsTab.account.rawValue)
                 .accessibilityIdentifier("settings-tab-account")
             NetworkSettingsTab(git: git)
                 .tabItem { Label("Network", systemImage: "network") }
+                .tag(SettingsTab.network.rawValue)
                 .accessibilityIdentifier("settings-tab-network")
             EnvironmentSettingsTab()
                 .tabItem { Label("Environment", systemImage: "terminal") }
+                .tag(SettingsTab.environment.rawValue)
                 .accessibilityIdentifier("settings-tab-environment")
             ThemeSettingsTab()
                 .tabItem { Label("Theme", systemImage: "paintpalette") }
+                .tag(SettingsTab.theme.rawValue)
                 .accessibilityIdentifier("settings-tab-theme")
         }
         .frame(width: 520, height: 470)
@@ -117,7 +130,7 @@ struct EnvironmentSettingsTab: View {
 /// Light, dark or follow the system, and the accent color.
 struct ThemeSettingsTab: View {
     @AppStorage(AppearanceSetting.storageKey) private var appearanceRaw = AppearanceSetting.system.rawValue
-    @AppStorage(AccentSetting.storageKey) private var accentRaw = LFAccentChoice.green.rawValue
+    @AppStorage(AccentSetting.storageKey) private var accentRaw = LFAccentChoice.teal.rawValue
 
     var body: some View {
         Form {
@@ -140,7 +153,7 @@ struct ThemeSettingsTab: View {
             } header: {
                 Text("Accent color")
             } footer: {
-                Text("Used for buttons, the selected section and row, and links. Green is the default.")
+                Text("Used for buttons, the selected section and row, and links. Teal is the default.")
             }
         }
         .formStyle(.grouped)

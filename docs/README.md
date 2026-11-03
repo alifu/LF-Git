@@ -13,7 +13,7 @@ the [top-level README](../README.md); these pages are for people changing the co
 | [conflict-editor.md](conflict-editor.md) | the conflict table, choices, Edit box, copy, binary files |
 | [engine.md](engine.md) | `LFCore` (C engine), `LFKit` (git client), `lfgit` CLI |
 | [clone-and-dashboard.md](clone-and-dashboard.md) | cloning from a URL, VPN wait and sign-in, reopening and closing a repository, the dashboard |
-| [shell-ui.md](shell-ui.md) | section ribbon, toolbar, command palette, shortcuts, dialogs |
+| [shell-ui.md](shell-ui.md) | side menu, cards, toolbar pills, command palette, shortcuts, dialogs |
 | [testing.md](testing.md) | which tests cover what, how to run them, known quirks |
 
 ## "Where is the code for …?"
@@ -32,7 +32,8 @@ the [top-level README](../README.md); these pages are for people changing the co
 | the branch list and its search | `Branches/BranchesViews.swift` |
 | the toolbar branch menu and its search | `Repository/RepositoryToolbar.swift` → `BranchMenu` |
 | "Are you sure?" dialogs | `RepositoryModel+Actions.swift`, `Branches/BranchContextMenu.swift`, `History/CommitContextMenu.swift` |
-| the ribbon | `Repository/SectionRibbon.swift` |
+| the side menu | `Repository/SectionRail.swift` |
+| cards, pills, dotted canvas | `Repository/CardStyle.swift`, `Repository/ToolbarPills.swift` |
 | the clone sheet and its states | `Clone/CloneModel.swift`, `Clone/CloneSheet.swift` |
 | `git clone` / `ls-remote` | `LFKit/GitClone.swift` |
 | the dashboard and its recent list | `Welcome/DashboardView.swift`, `RepositorySummary.swift` |

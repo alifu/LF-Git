@@ -91,8 +91,9 @@ struct ChangesDetailView: View {
                     content(selection: selection, change: change)
                 }
             } else {
-                ContentUnavailableView("Select a change", systemImage: "plus.forwardslash.minus",
-                                       description: Text("Choose a file to see what changed, and stage it or single hunks."))
+                EmptyPane("Select a change", symbol: "plus.forwardslash.minus",
+                          message: "Choose a file to see what changed, and stage it or single hunks.")
+                    .background(DotGridBackground())
             }
         }
         .background(.theme(.background))

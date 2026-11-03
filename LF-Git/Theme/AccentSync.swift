@@ -7,7 +7,7 @@ import SwiftUI
 /// build everything again with the new color; models live outside the views, so no work is lost, only transient
 /// view state such as which folders are open.
 private struct AccentSync: ViewModifier {
-    @AppStorage(AccentSetting.storageKey) private var accentRaw = LFAccentChoice.green.rawValue
+    @AppStorage(AccentSetting.storageKey) private var accentRaw = LFAccentChoice.teal.rawValue
     /// False for a window that keeps edits in its own state (Settings): it only gets the new tint.
     let rebuilds: Bool
 

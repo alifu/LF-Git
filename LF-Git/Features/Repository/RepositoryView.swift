@@ -1,7 +1,8 @@
 import LFKit
 import SwiftUI
 
-/// The sidebar and detail of one repository window.
+/// One repository window: the side menu on the left, then the section's list and detail as two cards on the
+/// window color, with the remote, project, branch and actions as pills in the toolbar.
 struct RepositoryView: View {
     @Bindable var repository: RepositoryModel
     let app: AppModel
@@ -9,17 +10,37 @@ struct RepositoryView: View {
     @State private var messageText = ""
 
     var body: some View {
-        VStack(spacing: 0) {
-            SectionRibbon(repository: repository)
-//                .frame(height: 120)
+        HStack(spacing: 0) {
+            SectionRail(repository: repository)
             splitView
         }
+        .background(.theme(.surfaceSunken))
+        .toolbar { toolbarContent }
+        .toolbarBackground(Color.theme(.surfaceSunken), for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
+        .navigationTitle(repository.name)
+        .modifier(HidesWindowTitle())
+        .focusedSceneValue(\.repositoryModel, repository)
+        .onAppear { repository.startWatching() }
+        .onDisappear { repository.stopWatching() }
+        .modifier(RepositoryDialogs(repository: repository, app: app, promptText: $promptText, messageText: $messageText))
     }
 
     private var splitView: some View {
         NavigationSplitView {
-            sidebar
-                .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 480)
+            VStack(spacing: 0) {
+                CardHeader(repository.section.rawValue, symbol: repository.section.symbol,
+                           count: repository.badgeCount(for: repository.section))
+                sidebar
+            }
+            .scrollContentBackground(.hidden)
+            .background(.theme(.background))
+            .lfCard()
+            .padding(.vertical, Chrome.gutter)
+            .padding(.trailing, Chrome.gutter / 2)
+            .background(.theme(.surfaceSunken))
+            .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 480)
+            .toolbar(removing: .sidebarToggle)
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -29,44 +50,63 @@ struct RepositoryView: View {
                         BisectBanner(repository: repository, app: app)
                     }
                 }
+                .lfCard()
+                .padding(.vertical, Chrome.gutter)
+                .padding(.leading, Chrome.gutter / 2)
+                .padding(.trailing, Chrome.gutter)
+                .background(.theme(.surfaceSunken))
         }
+        .navigationSplitViewStyle(.balanced)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if repository.showsLogPanel { LogPanelView(repository: repository) }
+            if repository.showsLogPanel {
+                LogPanelView(repository: repository)
+                    .lfCard()
+                    .padding([.leading, .trailing, .bottom], Chrome.gutter)
+            }
         }
-        .navigationTitle(repository.name)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            RemoteButtons(repository: repository, app: app)
+        }
+        ToolbarItem(placement: .principal) {
+            PillGroup {
+                ProjectMenu(repository: repository, app: app)
+                PillDivider()
                 BranchMenu(repository: repository, app: app)
             }
-            ToolbarItemGroup(placement: .primaryAction) {
-                RemoteButtons(repository: repository, app: app)
-                Button {
-                    Task { await repository.refresh(reloadDiffs: true) }
-                } label: {
-                    Label("Reload", systemImage: "arrow.clockwise")
+        }
+        ToolbarItem(placement: .primaryAction) {
+            HStack(spacing: 8) {
+                Button { repository.requestNewBranch(app: app) } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "plus")
+                        Text("New branch")
+                        Text("⌘B").foregroundStyle(.theme(.textSubtle))
+                    }
                 }
-                .help("Reload (⌘R)")
-                Button { repository.showsLogPanel.toggle() } label: {
-                    Label("Log", systemImage: "terminal")
-                }
-                .help("Show or hide the log panel (⇧⌘L)")
-                .accessibilityIdentifier("log-button")
+                .buttonStyle(.pill)
+                .disabled(repository.isBusy || repository.operation != nil)
+                .help("Create a branch at the current commit (⌘B)")
+                .accessibilityIdentifier("new-branch-button")
                 Button { repository.showsPalette = true } label: {
-                    Label("Commands", systemImage: "command")
+                    Image(systemName: "sparkle.magnifyingglass")
                 }
+                .buttonStyle(.pill)
                 .help("Command palette (⌘K)")
+                .accessibilityLabel("Commands")
                 .accessibilityIdentifier("palette-button")
                 Button { app.close() } label: {
-                    Label("Close Repository", systemImage: "xmark.square")
+                    Image(systemName: "xmark")
                 }
+                .buttonStyle(.pill)
                 .help("Close this repository and go back to the dashboard (⇧⌘W)")
+                .accessibilityLabel("Close Repository")
                 .accessibilityIdentifier("close-repository-button")
             }
         }
-        .focusedSceneValue(\.repositoryModel, repository)
-        .onAppear { repository.startWatching() }
-        .onDisappear { repository.stopWatching() }
-        .modifier(RepositoryDialogs(repository: repository, app: app, promptText: $promptText, messageText: $messageText))
     }
 
     @ViewBuilder
@@ -103,27 +143,38 @@ struct RepositoryView: View {
         case .remotes:
             RemotesDetail(repository: repository, app: app)
         case .worktrees:
-            ContentUnavailableView("Worktrees", systemImage: "square.stack.3d.up",
-                                   description: Text("Each worktree is another checkout of this repository. Right-click one to open it."))
-                .background(.theme(.background))
+            EmptyPane("Worktrees", symbol: "square.stack.3d.up",
+                      message: "Each worktree is another checkout of this repository. Right-click one to open it.")
+                .background(DotGridBackground())
         case .submodules:
-            ContentUnavailableView("Submodules", systemImage: "shippingbox",
-                                   description: Text("Repositories nested inside this one. Right-click one to update or open it."))
-                .background(.theme(.background))
+            EmptyPane("Submodules", symbol: "shippingbox",
+                      message: "Repositories nested inside this one. Right-click one to update or open it.")
+                .background(DotGridBackground())
         case .conflicts:
             if let file = repository.selectedFile {
                 FileDetailView(repository: repository, file: file, app: app)
                     .id(file.id)
             } else {
-                ContentUnavailableView(
+                EmptyPane(
                     repository.files.isEmpty ? "No conflicts" : "Select a file",
-                    systemImage: repository.files.isEmpty ? "checkmark.seal" : "doc.text",
-                    description: Text(repository.files.isEmpty
+                    symbol: repository.files.isEmpty ? "checkmark.seal" : "doc.text",
+                    message: repository.files.isEmpty
                         ? "Every conflicted file in \(repository.name) is resolved."
-                        : "Choose a conflicted file in the sidebar.")
+                        : "Choose a conflicted file in the list."
                 )
-                .background(.theme(.background))
+                .background(DotGridBackground())
             }
+        }
+    }
+}
+
+/// The project menu in the top bar already names the repository, so the window title is hidden where the OS allows.
+private struct HidesWindowTitle: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) {
+            content.toolbar(removing: .title)
+        } else {
+            content
         }
     }
 }
