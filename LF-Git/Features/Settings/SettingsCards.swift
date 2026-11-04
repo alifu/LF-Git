@@ -67,6 +67,7 @@ struct GitSettingsSaveBar: View {
                 Button("Revert") { git.load() }.disabled(!git.hasChanges)
                 Button("Save") { git.save() }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.flatProminent)
                     .disabled(!git.hasChanges)
                     .accessibilityIdentifier("settings-save")
             }

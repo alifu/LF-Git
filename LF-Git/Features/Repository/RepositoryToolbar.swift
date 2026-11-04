@@ -350,7 +350,7 @@ struct OperationBanner: View {
                 Button("Abort", role: .destructive) { confirmingAbort = true }
                     .accessibilityIdentifier("operation-abort")
                 Button("Continue") { run { try await repository.continueOperation() } }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.prominentPill)
                     .disabled(!repository.files.isEmpty || repository.isBusy)
                     .accessibilityIdentifier("operation-continue")
             }

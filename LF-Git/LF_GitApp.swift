@@ -9,6 +9,8 @@ struct LF_GitApp: App {
     var body: some Scene {
         Window("LF-Git", id: "main") {
             ContentView(app: app)
+                // Our own flat button everywhere a button has no style of its own: no Liquid Glass (macOS 26).
+                .buttonStyle(.flat)
                 .syncsAccent()
                 .syncsAppearance()
                 .onAppear {
@@ -25,6 +27,7 @@ struct LF_GitApp: App {
 
         Settings {
             SettingsView()
+                .buttonStyle(.flat)
                 .syncsAccent(rebuilds: false)
                 .syncsAppearance()
         }

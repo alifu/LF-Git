@@ -1,11 +1,16 @@
 import AppKit
 import SwiftUI
 
-/// The rounded outline every top-bar control sits in.
+/// The rounded outline every top-bar control sits in. Drawn entirely by us with theme tokens, so it never picks up the
+/// system's Liquid Glass bezel (macOS 26), unlike `.bordered` / `.borderedProminent` and the default push button.
 private struct PillChrome: ViewModifier {
     let isProminent: Bool
     let isPressed: Bool
     @State private var isHovering = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    /// How much a disabled control fades.
+    private static let disabledOpacity = 0.45
 
     func body(content: Content) -> some View {
         content
@@ -20,10 +25,12 @@ private struct PillChrome: ViewModifier {
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: Chrome.pillRadius))
+            .opacity(isEnabled ? 1 : Self.disabledOpacity)
             .onHover { isHovering = $0 }
     }
 
     private var fill: Color {
+        guard isEnabled else { return isProminent ? .theme(.accent) : .clear }
         if isProminent { return .theme(isPressed || isHovering ? .accentHover : .accent) }
         if isPressed { return .theme(.border) }
         return isHovering ? .theme(.surfaceRaised) : .clear
@@ -41,9 +48,40 @@ struct PillButtonStyle: ButtonStyle {
     }
 }
 
+/// The app-wide button: the pill look without forcing title and icon, so an icon-only or text-only label stays as
+/// it is. Set as the default style of every window (`LF_GitApp`), it replaces the system push button and its Liquid
+/// Glass bezel; buttons with a style of their own (`.borderless`, `.link`, `.plain`) are not affected.
+struct FlatButtonStyle: ButtonStyle {
+    var isProminent = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .modifier(PillChrome(isProminent: isProminent, isPressed: configuration.isPressed))
+    }
+}
+
+extension ButtonStyle where Self == FlatButtonStyle {
+    static var flat: FlatButtonStyle { FlatButtonStyle() }
+    /// For the default action of a sheet or bar (Save, Clone, Done).
+    static var flatProminent: FlatButtonStyle { FlatButtonStyle(isProminent: true) }
+}
+
 extension ButtonStyle where Self == PillButtonStyle {
     static var pill: PillButtonStyle { PillButtonStyle() }
     static var prominentPill: PillButtonStyle { PillButtonStyle(isProminent: true) }
+}
+
+extension ToolbarContent {
+    /// macOS 26 puts every toolbar item on a shared Liquid Glass capsule; our pills draw their own outline, so the
+    /// capsule is hidden. Earlier systems have no glass and need nothing.
+    @ToolbarContentBuilder
+    func withoutGlass() -> some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            sharedBackgroundVisibility(.hidden)
+        } else {
+            self
+        }
+    }
 }
 
 extension View {

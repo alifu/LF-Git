@@ -38,7 +38,9 @@ struct SectionRail: View {
                     Rectangle().fill(.theme(.border)).frame(width: 18, height: 1).padding(.vertical, 2)
                     ForEach(sections.more) { tile($0) }
                 }
-                .padding(.vertical, 2)
+                // The scroll view clips its content, so the first tile's badge (Changes) needs room above it.
+                .padding(.top, SideMenuTile.badgeOverhang + 2)
+                .padding(.bottom, 2)
                 .frame(maxWidth: .infinity)
             }
             .accessibilityElement(children: .contain)
@@ -121,6 +123,8 @@ extension RepositoryModel {
 /// One square tile of the side menu: an outlined icon, raised and tinted when selected, with an optional count.
 struct SideMenuTile: View {
     static let size: CGFloat = 34
+    /// How far the count badge sticks out above the tile's top edge.
+    static let badgeOverhang: CGFloat = 5
 
     let symbol: String
     let title: String
@@ -143,7 +147,7 @@ struct SideMenuTile: View {
                 .shadow(color: .black.opacity(isSelected ? 0.06 : 0), radius: 1, y: 1)
                 .overlay(alignment: .topTrailing) {
                     if count > 0 {
-                        CountCapsule(count: count, fill: countFill).offset(x: 6, y: -5)
+                        CountCapsule(count: count, fill: countFill).offset(x: 6, y: -Self.badgeOverhang)
                     }
                 }
                 .contentShape(RoundedRectangle(cornerRadius: Chrome.tileRadius))

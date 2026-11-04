@@ -58,7 +58,7 @@ private struct MessageEditorSheet: View {
                     dismiss()
                 }
                 .keyboardShortcut(.return, modifiers: .command)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.prominentPill)
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityIdentifier("message-editor-confirm")
             }

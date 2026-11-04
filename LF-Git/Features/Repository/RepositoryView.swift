@@ -88,6 +88,7 @@ struct RepositoryView: View {
         ToolbarItem(placement: .navigation) {
             RemoteButtons(repository: repository, app: app)
         }
+        .withoutGlass()
         ToolbarItem(placement: .principal) {
             PillGroup {
                 ProjectMenu(repository: repository, app: app)
@@ -95,6 +96,7 @@ struct RepositoryView: View {
                 BranchMenu(repository: repository, app: app)
             }
         }
+        .withoutGlass()
         ToolbarItem(placement: .primaryAction) {
             HStack(spacing: 8) {
                 Button { repository.requestNewBranch(app: app) } label: {
@@ -124,6 +126,7 @@ struct RepositoryView: View {
                 .accessibilityIdentifier("close-repository-button")
             }
         }
+        .withoutGlass()
     }
 
     @ViewBuilder

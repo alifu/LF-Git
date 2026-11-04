@@ -50,7 +50,7 @@ struct EditConflictView: View {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.prominentPill)
                 .accessibilityIdentifier("edit-apply")
             }
             .padding(12)

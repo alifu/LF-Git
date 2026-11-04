@@ -142,6 +142,7 @@ struct CloneSheet: View {
                     .accessibilityIdentifier("clone-cancel")
                 Button("Clone") { model.clone() }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.flatProminent)
                     .disabled(!model.canClone)
                     .accessibilityIdentifier("clone-button")
             }

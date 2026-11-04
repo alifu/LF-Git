@@ -122,7 +122,7 @@ struct CommitBox: View {
                 do { try await changes.commit() } catch { app.report(error) }
             }
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.prominentPill)
         .keyboardShortcut(.return, modifiers: .command)
         .disabled(!changes.canCommit)
         .accessibilityIdentifier("commit-button")

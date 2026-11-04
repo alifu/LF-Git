@@ -154,7 +154,9 @@ struct KeyboardHelpView: View {
             HStack {
                 Text("Keyboard Shortcuts").font(.headline)
                 Spacer()
-                Button("Done") { repository.showsHelp = false }.keyboardShortcut(.defaultAction)
+                Button("Done") { repository.showsHelp = false }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.flatProminent)
             }
             .padding(12)
             Divider()
