@@ -33,7 +33,7 @@ struct RecentRepositoryRow: View {
             chips
             if prominent {
                 Button("Open") { app.open(url) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.prominentPill)
                     .disabled(isMissing)
                     .accessibilityIdentifier("dashboard-open-last")
             }

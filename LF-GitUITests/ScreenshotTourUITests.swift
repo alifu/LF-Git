@@ -5,34 +5,8 @@ import XCTest
 final class ScreenshotTourUITests: GitUITestCase {
     private func item(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id] }
 
-    private func commit(_ message: String, files: [String: String]) throws {
-        for (path, text) in files { try write(path, text) }
-        try git("add", "-A")
-        try git("commit", "-q", "-m", message)
-    }
-
-    private func buildProject() throws {
-        try commit("Add the greeter", files: [
-            "Sources/Greeter.swift": "import Foundation\n\nstruct Greeter {\n    let name: String\n\n    func greet() -> String {\n        \"Hello, \\(name)\"\n    }\n}\n",
-            "README.md": "# Demo\n\nA small project.\n",
-        ])
-        try commit("Add tests", files: ["Tests/GreeterTests.swift": "import XCTest\n\nfinal class GreeterTests: XCTestCase {}\n"])
-        try git("tag", "v0.1")
-        try git("checkout", "-q", "-b", "feature/shout")
-        try commit("Shout the greeting", files: ["Sources/Shout.swift": "func shout(_ text: String) -> String { text.uppercased() }\n"])
-        try git("checkout", "-q", "main")
-        try git("branch", "feature/quiet")
-        try git("branch", "release/1.0")
-        // Work in progress: an edit in two places, a new file in a folder, a staged file.
-        try write("Sources/Greeter.swift",
-                  "import Foundation\n\nstruct Greeter {\n    let name: String\n    var punctuation = \"!\"\n\n    func greet() -> String {\n        \"Hello, \\(name)\\(punctuation)\"\n    }\n}\n")
-        try write("Sources/Farewell.swift", "struct Farewell {\n    func say() -> String { \"Goodbye\" }\n}\n")
-        try write("README.md", "# Demo\n\nA small project that greets people.\n")
-        try git("add", "README.md")
-    }
-
     func testTourOfTheFeatures() throws {
-        try buildProject()
+        try buildDemoProject()
         let app = launch(appearance: "light")
 
         // Changes: staged and unstaged folders, a diff with selected lines.

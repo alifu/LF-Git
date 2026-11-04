@@ -103,6 +103,9 @@ struct TagsSidebar: View {
 struct ReflogSidebar: View {
     @Bindable var repository: RepositoryModel
     let app: AppModel
+    @AppStorage(LayoutPreferences.timelineKey) private var showsTimeline = LayoutPreferences.timelineDefault
+    /// Reflog entries by day; rebuilt only when the reflog changes. O(m) for m entries.
+    @State private var timeline = ReflogTimeline<GitReflogEntry>([], id: { $0.id }, date: { $0.date })
 
     var body: some View {
         VStack(spacing: 0) {
@@ -114,12 +117,25 @@ struct ReflogSidebar: View {
                 .accessibilityIdentifier("reflog-undo")
             }
             List(selection: $repository.reflogSelection) {
-                ForEach(repository.reflog) { entry in
-                    SimpleRow(symbol: "arrow.uturn.backward.circle", title: entry.message,
-                              subtitle: entry.date.formatted(.relative(presentation: .named)),
-                              trailing: entry.shortHash, identifier: "reflog-\(entry.selector)")
-                        .tag(entry.id)
-                        .contextMenu { menu(for: entry) }
+                if showsTimeline {
+                    ForEach(timeline.groups) { group in
+                        Section(group.title) {
+                            ForEach(group.items) { entry in
+                                TimelineRow(entry: entry, isCurrent: entry.id == timeline.currentID,
+                                            isFirst: entry.id == group.items.first?.id, isLast: entry.id == group.items.last?.id)
+                                    .tag(entry.id)
+                                    .contextMenu { menu(for: entry) }
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(repository.reflog) { entry in
+                        SimpleRow(symbol: "arrow.uturn.backward.circle", title: entry.message,
+                                  subtitle: entry.date.formatted(.relative(presentation: .named)),
+                                  trailing: entry.shortHash, identifier: "reflog-\(entry.selector)")
+                            .tag(entry.id)
+                            .contextMenu { menu(for: entry) }
+                    }
                 }
             }
             .listStyle(.sidebar)
@@ -127,6 +143,9 @@ struct ReflogSidebar: View {
             .accessibilityIdentifier("reflog-list")
         }
         .onChange(of: repository.reflogSelection, initial: true) { show() }
+        .onChange(of: repository.reflog, initial: true) {
+            timeline = ReflogTimeline(repository.reflog, id: { $0.id }, date: { $0.date })
+        }
     }
 
     private func show() {
@@ -172,6 +191,60 @@ struct ReflogSidebar: View {
 
     private func act(_ title: String, _ work: @escaping @Sendable (GitClient) throws -> Void) {
         app.run { try await repository.perform(title) { client, _ in try work(client) } }
+    }
+}
+
+/// One reflog entry on the timeline: time, a connector line with a dot, then the usual text.
+private struct TimelineRow: View {
+    let entry: GitReflogEntry
+    let isCurrent: Bool
+    let isFirst: Bool
+    let isLast: Bool
+
+    private static let railWidth: CGFloat = 14
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(entry.date.formatted(date: .omitted, time: .shortened))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.theme(.textSubtle))
+                .frame(width: 56, alignment: .trailing)
+            rail
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(entry.message).lineLimit(1).truncationMode(.middle)
+                    if isCurrent { currentBadge }
+                }
+                Text(entry.shortHash).font(.caption.monospaced()).foregroundStyle(.theme(.textSubtle))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("reflog-\(entry.selector)")
+    }
+
+    /// The connector: a hairline through the row, cut at the day's first and last entries, and the dot.
+    private var rail: some View {
+        ZStack(alignment: .top) {
+            Rectangle().fill(.theme(.border)).frame(width: 1)
+                .padding(.top, isFirst ? 8 : -4)
+                .padding(.bottom, isLast ? 0 : -4)
+                .opacity(isFirst && isLast ? 0 : 1)
+            Circle().fill(.theme(isCurrent ? .accent : .borderStrong)).frame(width: 8, height: 8).padding(.top, 4)
+        }
+        .frame(width: Self.railWidth)
+    }
+
+    private var currentBadge: some View {
+        Text("Current")
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(.theme(.accentSubtle)))
+            .foregroundStyle(.theme(.accentText))
+            .accessibilityIdentifier("reflog-current")
     }
 }
 

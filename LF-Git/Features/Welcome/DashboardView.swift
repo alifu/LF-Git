@@ -29,14 +29,18 @@ struct DashboardView: View {
                     .foregroundStyle(.theme(.textSubtle))
                     .accessibilityIdentifier("dashboard-restore-note")
             }
-            actions
-            if let lastOpened { lastOpenedCard(lastOpened) }
-            // Only the recent list scrolls; everything else keeps its place.
-            HStack(alignment: .top, spacing: 24) {
-                recents
-                preview.frame(width: 300)
+            if app.recentRepositories.isEmpty {
+                emptyHero
+            } else {
+                actions
+                if let lastOpened { lastOpenedCard(lastOpened) }
+                // Only the recent list scrolls; everything else keeps its place.
+                HStack(alignment: .top, spacing: 24) {
+                    recents
+                    preview.frame(width: 300)
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
             }
-            .frame(maxHeight: .infinity, alignment: .top)
             Text("Engine \(LFKitInfo.version)  ·  Tip: `lfgit open` in a repository opens it here.")
                 .font(.caption)
                 .foregroundStyle(.theme(.textSubtle))
@@ -73,6 +77,16 @@ struct DashboardView: View {
             ActionCard(title: "Clone Repository…", detail: "From a web address, public or private", symbol: "arrow.down.circle",
                        shortcut: "⇧⌘O", identifier: "clone-repository") { app.showsClone = true }
         }
+    }
+
+    /// With no recent repositories there is no list to show, so the actions take the full width.
+    private var emptyHero: some View {
+        HeroPane(title: "Open a repository to start",
+                 message: "Repositories you open or clone show up here, so you can come back to them later.",
+                 symbol: "arrow.triangle.branch") {
+            actions
+        }
+        .frame(maxHeight: .infinity)
     }
 
     private func lastOpenedCard(_ path: String) -> some View {

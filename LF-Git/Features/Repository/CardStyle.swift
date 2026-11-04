@@ -1,13 +1,26 @@
 import SwiftUI
 
 /// Shapes and sizes shared by the window's cards, side menu and pills.
-enum Chrome {
+nonisolated enum Chrome {
     static let cardRadius: CGFloat = 10
     static let pillRadius: CGFloat = 7
     static let pillHeight: CGFloat = 26
     static let tileRadius: CGFloat = 8
     /// Space between the window edge, the side menu and the cards.
     static let gutter: CGFloat = 8
+
+    // Sizes measured in the GitButler Desktop 3.5 Figma file (see .claude/plans/gitbutler-layout-redesign.plan.md).
+    /// A list column (Unassigned, commit list).
+    static let listColumn: CGFloat = 300
+    static let listColumnMax: CGFloat = 420
+    /// A lane on the lanes canvas.
+    static let laneWidth: CGFloat = 340
+    /// A detail panel that opens beside a lane or inside a widened list card.
+    static let panelWidth: CGFloat = 440
+    /// The sidebar of the Settings window.
+    static let settingsSidebar: CGFloat = 240
+    /// The content column of the Settings window.
+    static let settingsContent: CGFloat = 580
 }
 
 extension View {

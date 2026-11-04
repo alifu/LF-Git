@@ -58,9 +58,9 @@ struct CommitContextMenu: View {
                 Button("Move Down") { act("Moving…") { try $0.moveCommitDown(commit) } }
                     .disabled(isLast)
                 Button("Amend with Staged Changes") { act("Amending…") { try $0.amendCommit(commit) } }
-                    .disabled(repository.status.staged.isEmpty)
+                    .disabled(repository.changeListing.staged.isEmpty)
                 Button("Create Fixup Commit from Staged Changes") { act("Creating fixup…") { try $0.createFixupCommit(for: commit) } }
-                    .disabled(repository.status.staged.isEmpty)
+                    .disabled(repository.changeListing.staged.isEmpty)
                 Button("Squash All Fixup Commits Above…") { rewrite("Autosquash", commit, "and every fixup! or squash! commit above it are rebased and combined") { try $0.autosquash(above: commit) } }
             }
         }

@@ -20,10 +20,40 @@ class GitUITestCase: XCTestCase {
 
     // MARK: - Helpers
 
+    func commit(_ message: String, files: [String: String]) throws {
+        for (path, text) in files { try write(path, text) }
+        try git("add", "-A")
+        try git("commit", "-q", "-m", message)
+    }
+
+    /// The demo project of the screenshot tours: two commits, a tag, three branches, and work in progress (an edit
+    /// in two places, a new file in a folder, a staged file).
+    func buildDemoProject() throws {
+        try commit("Add the greeter", files: [
+            "Sources/Greeter.swift": "import Foundation\n\nstruct Greeter {\n    let name: String\n\n    func greet() -> String {\n        \"Hello, \\(name)\"\n    }\n}\n",
+            "README.md": "# Demo\n\nA small project.\n",
+        ])
+        try commit("Add tests", files: ["Tests/GreeterTests.swift": "import XCTest\n\nfinal class GreeterTests: XCTestCase {}\n"])
+        try git("tag", "v0.1")
+        try git("checkout", "-q", "-b", "feature/shout")
+        try commit("Shout the greeting", files: ["Sources/Shout.swift": "func shout(_ text: String) -> String { text.uppercased() }\n"])
+        try git("checkout", "-q", "main")
+        try git("branch", "feature/quiet")
+        try git("branch", "release/1.0")
+        // Work in progress: an edit in two places, a new file in a folder, a staged file.
+        try write("Sources/Greeter.swift",
+                  "import Foundation\n\nstruct Greeter {\n    let name: String\n    var punctuation = \"!\"\n\n    func greet() -> String {\n        \"Hello, \\(name)\\(punctuation)\"\n    }\n}\n")
+        try write("Sources/Farewell.swift", "struct Farewell {\n    func say() -> String { \"Goodbye\" }\n}\n")
+        try write("README.md", "# Demo\n\nA small project that greets people.\n")
+        try git("add", "README.md")
+    }
+
+
     /// `accent` is passed as a launch argument, which beats whatever an earlier run or the user stored.
-    func launch(appearance: String, accent: String = "teal") -> XCUIApplication {
+    /// `arguments` are added after the defaults, e.g. `["-layout.changes", "lanes"]` to pick a layout for this run only.
+    func launch(appearance: String, accent: String = "teal", arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--repo", repository.path, "-appearance", appearance, "-accentColor", accent]
+        app.launchArguments = ["--repo", repository.path, "-appearance", appearance, "-accentColor", accent] + arguments
         app.launch()
         return app
     }

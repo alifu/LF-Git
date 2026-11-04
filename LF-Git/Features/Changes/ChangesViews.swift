@@ -2,15 +2,34 @@ import AppKit
 import LFKit
 import SwiftUI
 
-/// The commit message, amend and commit.
+/// The commit message, amend and commit. Docked (in a list or a lane) or in a floating panel; while it floats,
+/// the docked one shows a notice instead, so there is only ever one editor and one ⌘↩. Body: O(1).
 struct CommitBox: View {
     let repository: RepositoryModel
     let app: AppModel
+    /// This box is the one inside the floating panel.
+    var isFloating = false
     @FocusState private var focused: Bool
+    @Environment(\.changesFloating) private var floating
+
+    private static let dockedEditorHeight: CGFloat = 72
+    private static let floatingEditorHeight: CGFloat = 150
 
     private var changes: ChangesModel { repository.changes }
 
     var body: some View {
+        if !isFloating && floating.wrappedValue.showsEditor {
+            PoppedOutNotice(title: "The commit message is in a floating panel", symbol: "macwindow.on.rectangle",
+                            identifier: "dock-commit-editor") {
+                floating.wrappedValue = floating.wrappedValue.with(editor: false)
+            }
+        } else {
+            editor
+        }
+    }
+
+    @ViewBuilder
+    private var editor: some View {
         @Bindable var changes = changes
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .topLeading) {
@@ -18,7 +37,7 @@ struct CommitBox: View {
                     .font(.body)
                     .scrollContentBackground(.hidden)
                     .focused($focused)
-                    .frame(height: 72)
+                    .frame(height: isFloating ? Self.floatingEditorHeight : Self.dockedEditorHeight)
                     .padding(4)
                     .background(RoundedRectangle(cornerRadius: 6).fill(.theme(.surfaceRaised)))
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(.theme(focused ? .accent : .border)))
@@ -31,56 +50,108 @@ struct CommitBox: View {
                         .allowsHitTesting(false)
                 }
             }
-            HStack {
-                Toggle("Amend last commit", isOn: Binding(
-                    get: { changes.amend },
-                    set: { on in Task { await changes.setAmend(on) } }
-                ))
-                .toggleStyle(.checkbox)
-                .font(.callout)
-                .accessibilityIdentifier("amend")
-                Toggle("Skip hooks", isOn: $changes.noVerify)
-                    .toggleStyle(.checkbox)
-                    .font(.callout)
-                    .help("Commit with --no-verify: pre-commit and commit-msg hooks do not run")
-                    .accessibilityIdentifier("no-verify")
-                Spacer()
-                Button(changes.amend ? "Amend" : "Commit") {
-                    Task {
-                        do { try await changes.commit() } catch { app.report(error) }
+            // One row when the column is wide enough; in a narrow one (the sidebar's 280pt minimum) the checkboxes
+            // go above the button instead of being squeezed and truncated.
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    options
+                    Spacer()
+                    commitButton
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack { options }
+                    HStack {
+                        Spacer()
+                        commitButton
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.return, modifiers: .command)
-                .disabled(!changes.canCommit)
-                .accessibilityIdentifier("commit-button")
             }
-            if let branch = repository.status.branch {
-                Text("on \(branch)")
-                    .font(.caption)
-                    .foregroundStyle(.theme(.textSubtle))
-            } else if repository.status.isDetached {
-                Label("Detached HEAD: commits belong to no branch", systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.theme(.warning))
+            HStack(spacing: 6) {
+                branchLine
+                Spacer(minLength: 4)
+                if !isFloating { popOutButton }
             }
         }
         .padding(10)
         .background(.theme(.surfaceRaised))
     }
+
+    @ViewBuilder
+    private var branchLine: some View {
+        if let branch = repository.status.branch {
+            Text("on \(branch)")
+                .font(.caption)
+                .foregroundStyle(.theme(.textSubtle))
+        } else if repository.status.isDetached {
+            Label("Detached HEAD: commits belong to no branch", systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.theme(.warning))
+        }
+    }
+
+    private var popOutButton: some View {
+        Button { floating.wrappedValue = floating.wrappedValue.with(editor: true) } label: {
+            Image(systemName: "macwindow.on.rectangle")
+        }
+        .buttonStyle(.borderless)
+        .help("Edit the commit message in a floating panel")
+        .accessibilityLabel("Pop Out Commit Editor")
+        .accessibilityIdentifier("pop-out-commit-editor")
+    }
+
+    @ViewBuilder
+    private var options: some View {
+        @Bindable var changes = changes
+        Toggle("Amend last commit", isOn: Binding(
+            get: { changes.amend },
+            set: { on in Task { await changes.setAmend(on) } }
+        ))
+        .toggleStyle(.checkbox)
+        .font(.callout)
+        .accessibilityIdentifier("amend")
+        Toggle("Skip hooks", isOn: $changes.noVerify)
+            .toggleStyle(.checkbox)
+            .font(.callout)
+            .help("Commit with --no-verify: pre-commit and commit-msg hooks do not run")
+            .accessibilityIdentifier("no-verify")
+    }
+
+    private var commitButton: some View {
+        Button(changes.amend ? "Amend" : "Commit") {
+            Task {
+                do { try await changes.commit() } catch { app.report(error) }
+            }
+        }
+        .buttonStyle(.prominentPill)
+        .keyboardShortcut(.return, modifiers: .command)
+        .disabled(!changes.canCommit)
+        .accessibilityIdentifier("commit-button")
+    }
 }
 
-/// The diff of the selected change.
+/// The diff of the selected change. Body: O(1) here; the diff table draws O(visible rows).
 struct ChangesDetailView: View {
     let repository: RepositoryModel
     let app: AppModel
+    /// Adds a ✕ to the header, for a diff shown as a panel.
+    var onClose: (() -> Void)?
+    /// False inside the floating diff panel itself.
+    var allowsPopOut = true
     @State private var lineSelection: Set<Int> = []
+    @Environment(\.changesFloating) private var floating
 
     private var changes: ChangesModel { repository.changes }
 
     var body: some View {
         Group {
-            if let selection = changes.selection, let change = changes.change(for: selection) {
+            if allowsPopOut && floating.wrappedValue.showsDiff {
+                EmptyPane("The diff is in a floating panel", symbol: "macwindow.on.rectangle",
+                          message: "Close the panel, or bring the diff back here.") {
+                    Button("Bring Back") { floating.wrappedValue = floating.wrappedValue.with(diff: false) }
+                        .accessibilityIdentifier("dock-diff")
+                }
+                .background(DotGridBackground())
+            } else if let selection = changes.selection, let change = changes.change(for: selection) {
                 VStack(spacing: 0) {
                     header(selection: selection, change: change)
                     Divider()
@@ -99,28 +170,62 @@ struct ChangesDetailView: View {
         .background(.theme(.background))
     }
 
+    /// One row when it fits; in a narrow panel the actions go on a second row.
     private func header(selection: ChangeSelection, change: GitChange) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text((change.path as NSString).lastPathComponent).font(.headline).foregroundStyle(.theme(.text))
-                Text(change.path).font(.caption).foregroundStyle(.theme(.textSubtle)).lineLimit(1).truncationMode(.head)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                fileTitle(change)
+                Spacer()
+                headerActions(selection: selection, change: change)
             }
-            Spacer()
-            DiffOptionsMenu(changes: changes)
-            Text(selection.staged ? "Staged" : "Not staged")
-                .font(.callout)
-                .foregroundStyle(.theme(selection.staged ? .accentText : .textSubtle))
-            Button(selection.staged ? "Unstage File" : "Stage File") {
-                Task {
-                    do {
-                        if selection.staged { try await changes.unstage(change) } else { try await changes.stage([change.path]) }
-                    } catch { app.report(error) }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    fileTitle(change)
+                    Spacer(minLength: 4)
+                    if let onClose { CloseButton(label: "Close Diff", action: onClose) }
+                }
+                HStack(spacing: 10) {
+                    Spacer(minLength: 0)
+                    headerActions(selection: selection, change: change, showsClose: false)
                 }
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(.theme(.surfaceRaised))
+    }
+
+    private func fileTitle(_ change: GitChange) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text((change.path as NSString).lastPathComponent).font(.headline).foregroundStyle(.theme(.text))
+            Text(change.path).font(.caption).foregroundStyle(.theme(.textSubtle)).lineLimit(1).truncationMode(.head)
+        }
+    }
+
+    @ViewBuilder
+    private func headerActions(selection: ChangeSelection, change: GitChange, showsClose: Bool = true) -> some View {
+        DiffOptionsMenu(changes: changes)
+        Text(selection.staged ? "Staged" : "Not staged")
+            .font(.callout)
+            .foregroundStyle(.theme(selection.staged ? .accentText : .textSubtle))
+            .fixedSize()
+        Button(selection.staged ? "Unstage File" : "Stage File") {
+            Task {
+                do {
+                    if selection.staged { try await changes.unstage(change) } else { try await changes.stage([change.path]) }
+                } catch { app.report(error) }
+            }
+        }
+        if allowsPopOut {
+            Button { floating.wrappedValue = floating.wrappedValue.with(diff: true) } label: {
+                Image(systemName: "macwindow.on.rectangle")
+            }
+            .buttonStyle(.borderless)
+            .help("Pop out the diff into a floating panel with the file list")
+            .accessibilityLabel("Pop Out Diff")
+            .accessibilityIdentifier("pop-out-diff")
+        }
+        if showsClose, let onClose { CloseButton(label: "Close Diff", action: onClose) }
     }
 
     @ViewBuilder

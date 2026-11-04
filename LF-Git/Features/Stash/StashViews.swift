@@ -13,7 +13,7 @@ struct StashSidebar: View {
                     Button("Stash All Changes…") { stash(.init()) }
                     Button("Stash Including Untracked Files…") { stash(.init(includeUntracked: true)) }
                     Button("Stash Staged Changes Only…") { stash(.init(stagedOnly: true)) }
-                        .disabled(repository.status.staged.isEmpty)
+                        .disabled(repository.changeListing.staged.isEmpty)
                     Button("Stash and Keep Staged Changes…") { stash(.init(keepIndex: true)) }
                 } label: {
                     Label("Stash Changes", systemImage: "tray.and.arrow.down")

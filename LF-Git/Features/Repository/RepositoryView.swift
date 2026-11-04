@@ -8,11 +8,21 @@ struct RepositoryView: View {
     let app: AppModel
     @State private var promptText = ""
     @State private var messageText = ""
+    @AppStorage(LayoutPreferences.changesKey) private var changesLayoutValue = ChangesLayout.default.rawValue
+
+    private var changesLayout: ChangesLayout { ChangesLayout(stored: changesLayoutValue) }
 
     var body: some View {
         HStack(spacing: 0) {
             SectionRail(repository: repository)
-            splitView
+            content
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if repository.showsLogPanel {
+                        LogPanelView(repository: repository)
+                            .lfCard()
+                            .padding([.leading, .trailing, .bottom], Chrome.gutter)
+                    }
+                }
         }
         .background(.theme(.surfaceSunken))
         .toolbar { toolbarContent }
@@ -24,6 +34,20 @@ struct RepositoryView: View {
         .onAppear { repository.startWatching() }
         .onDisappear { repository.stopWatching() }
         .modifier(RepositoryDialogs(repository: repository, app: app, promptText: $promptText, messageText: $messageText))
+    }
+
+    /// Changes in the Inline or Lanes layout owns the whole content area; everything else uses the split view.
+    /// The floating panels of Changes (pop-out diff, commit editor) float over either, in every layout.
+    private var content: some View {
+        ChangesFloatingHost(repository: repository, app: app, isActive: repository.section == .changes) {
+            if repository.section == .changes && changesLayout != .classic {
+                ChangesWorkspace(repository: repository, app: app, layout: changesLayout)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.theme(.surfaceSunken))
+            } else {
+                splitView
+            }
+        }
     }
 
     private var splitView: some View {
@@ -57,13 +81,6 @@ struct RepositoryView: View {
                 .background(.theme(.surfaceSunken))
         }
         .navigationSplitViewStyle(.balanced)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if repository.showsLogPanel {
-                LogPanelView(repository: repository)
-                    .lfCard()
-                    .padding([.leading, .trailing, .bottom], Chrome.gutter)
-            }
-        }
     }
 
     @ToolbarContentBuilder
@@ -71,6 +88,7 @@ struct RepositoryView: View {
         ToolbarItem(placement: .navigation) {
             RemoteButtons(repository: repository, app: app)
         }
+        .withoutGlass()
         ToolbarItem(placement: .principal) {
             PillGroup {
                 ProjectMenu(repository: repository, app: app)
@@ -78,6 +96,7 @@ struct RepositoryView: View {
                 BranchMenu(repository: repository, app: app)
             }
         }
+        .withoutGlass()
         ToolbarItem(placement: .primaryAction) {
             HStack(spacing: 8) {
                 Button { repository.requestNewBranch(app: app) } label: {
@@ -107,6 +126,7 @@ struct RepositoryView: View {
                 .accessibilityIdentifier("close-repository-button")
             }
         }
+        .withoutGlass()
     }
 
     @ViewBuilder

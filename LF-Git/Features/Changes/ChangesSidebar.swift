@@ -2,11 +2,26 @@ import AppKit
 import LFKit
 import SwiftUI
 
+/// Which sections a changes list shows. Fixed for the life of a list, so a section is never inserted or removed.
+nonisolated enum ChangeSides: Sendable {
+    case both
+    /// Only the staged files (the working lane of the Lanes layout).
+    case staged
+    /// Only the unstaged files (the left card of the Lanes layout).
+    case unstaged
+
+    var showsStaged: Bool { self != .unstaged }
+    var showsUnstaged: Bool { self != .staged }
+}
+
 /// Staged and unstaged files as collapsible sections of folders, with the commit box underneath.
-/// Space stages or unstages the selected files.
+/// Space stages or unstages the selected files. Body: O(shown rows), at most 500 per section (`CappedRows`).
 struct ChangesSidebar: View {
     let repository: RepositoryModel
     let app: AppModel
+    /// The Classic sidebar shows both sections and the commit box; the other layouts take parts of it.
+    var sides: ChangeSides = .both
+    var showsCommitBox = true
     @State private var discarding: [GitChange] = []
     @State private var picked: Set<ChangeSelection> = []
     /// Sections and folders the user closed; everything is open by default.
@@ -34,29 +49,44 @@ struct ChangesSidebar: View {
             }
             .labelStyle(.iconOnly)
             // `set: { pick($0) }`, not `set: pick`: the method reference crashes the Swift 6.2 compiler (IRGen).
+            // Both sections stay in the list while there is anything to show, even when one of them is empty.
+            // Inserting and removing the first section of a sidebar List shifts the second one, and the outline view
+            // behind it then misplaces headers and rows (the "sometimes wrong" stage/unstage layout).
             List(selection: Binding(get: { picked }, set: { pick($0) })) {
-                if repository.status.isClean {
-                    ContentUnavailableView("No changes", systemImage: "checkmark.circle",
-                                           description: Text("The working tree matches the last commit."))
-                        .listRowSeparator(.hidden)
-                }
-                if !staged.isEmpty {
-                    section("Staged", key: "section:staged", changes: staged, tree: repository.changeListing.stagedTree, isStaged: true, action: "Unstage All") {
-                        app.run { try await changes.unstageAll() }
+                if !repository.status.isClean {
+                    // `sides` never changes for one list, so these conditions never insert or remove a section.
+                    if sides.showsStaged {
+                        section("Staged", key: "section:staged", changes: staged, tree: repository.changeListing.stagedTree, isStaged: true, action: "Unstage All") {
+                            app.run { try await changes.unstageAll() }
+                        }
                     }
-                }
-                if !unstaged.isEmpty {
-                    section("Changes", key: "section:unstaged", changes: unstaged, tree: repository.changeListing.unstagedTree, isStaged: false, action: "Stage All") {
-                        app.run { try await changes.stageAll() }
+                    if sides.showsUnstaged {
+                        section("Changes", key: "section:unstaged", changes: unstaged, tree: repository.changeListing.unstagedTree, isStaged: false, action: "Stage All") {
+                            app.run { try await changes.stageAll() }
+                        }
                     }
                 }
             }
             .listStyle(.sidebar)
+            // The card behind the list gives the background, wherever the list is placed (sidebar column, lane,
+            // inline card, floating panel); the sidebar style's own grey would show inside white cards.
+            .scrollContentBackground(.hidden)
+            // An overlay, not a row: a row's height is cached by the list and goes stale when the tree turns clean.
+            .overlay {
+                if repository.status.isClean {
+                    ContentUnavailableView("No changes", systemImage: "checkmark.circle",
+                                           description: Text("The working tree matches the last commit."))
+                }
+            }
             .accessibilityIdentifier("changes-list")
             .onKeyPress(.space) { toggleStage() }
-            .onChange(of: changes.selection) { syncPicked() }
-            Divider()
-            CommitBox(repository: repository, app: app)
+            // `initial`: a list made while a file is already selected (another layout, the pop-out diff, coming back to
+            // Changes) highlights it at once, so Space works without clicking the row again.
+            .onChange(of: changes.selection, initial: true) { syncPicked() }
+            if showsCommitBox {
+                Divider()
+                CommitBox(repository: repository, app: app)
+            }
         }
         .confirmationDialog(
             discarding.count == 1 ? "Discard changes to \(discarding[0].path)?" : "Discard \(discarding.count) changes?",
@@ -81,10 +111,9 @@ struct ChangesSidebar: View {
                 ChangeTreeRows(nodes: tree, isStaged: isStaged, repository: repository, app: app,
                                discarding: $discarding, collapsed: $collapsed)
             } else {
-                CappedRows(items: list) { change in
+                CappedRows(items: list, id: { ChangeSelection(path: $0.path, staged: isStaged) }) { change in
                     ChangeRow(change: change, staged: isStaged, showsFolder: true, app: app, repository: repository, discarding: $discarding)
                         .tag(ChangeSelection(path: change.path, staged: isStaged))
-                        .id(ChangeSelection(path: change.path, staged: isStaged))
                 }
             }
         } header: {
@@ -93,6 +122,7 @@ struct ChangesSidebar: View {
                 Spacer()
                 Button(action, action: perform)
                     .buttonStyle(.link)
+                    .disabled(list.isEmpty)
                     .font(.caption)
                     .accessibilityIdentifier(action.lowercased().replacingOccurrences(of: " ", with: "-"))
             }
@@ -127,10 +157,20 @@ struct ChangesSidebar: View {
         }
     }
 
-    /// The model moves the selection when a staged file changes lists; follow it.
+    /// The model moves the selection when a staged file changes lists; follow it. A file that is no longer selected
+    /// (closed in another layout, or gone after a commit) loses its highlight, so clicking it again selects it again.
+    /// A list that shows only one side ignores a selection on the other side, so Space in it can never stage or
+    /// unstage a file it does not list.
     private func syncPicked() {
-        guard let selection = changes.selection else { return }
+        guard let selection = changes.selection, shows(selection) else {
+            if picked.count == 1, picked.first?.isFolder == false { picked = [] }
+            return
+        }
         if !picked.contains(selection) { picked = [selection] }
+    }
+
+    private func shows(_ selection: ChangeSelection) -> Bool {
+        selection.staged ? sides.showsStaged : sides.showsUnstaged
     }
 
     /// The selected files, with every file below a selected folder, each once.
@@ -170,13 +210,12 @@ private struct ChangeTreeRows: View {
     @Binding var collapsed: Set<String>
 
     var body: some View {
-        CappedRows(items: nodes) { node in
+        // The same path (file or folder) can be a row in both sections; its identity must say which, or the outline
+        // view reuses a row that moved between them (stale highlight, disclosure state or position).
+        CappedRows(items: nodes, id: { ChangeSelection(path: $0.id, staged: isStaged, isFolder: $0.isFolder) }) { node in
             if let change = node.item {
                 ChangeRow(change: change, staged: isStaged, showsFolder: false, app: app, repository: repository, discarding: $discarding)
                     .tag(ChangeSelection(path: change.path, staged: isStaged))
-                    // The same path is a row in both sections; its identity must say which, or a row that moved
-                    // between them can be left behind (stale highlight and button).
-                    .id(ChangeSelection(path: change.path, staged: isStaged))
             } else {
                 DisclosureGroup(isExpanded: expansion(node)) {
                     ChangeTreeRows(nodes: node.children ?? [], isStaged: isStaged, repository: repository, app: app,
@@ -237,16 +276,18 @@ private struct ChangeTreeRows: View {
 }
 
 /// Rows of a long list, a page at a time. A List asked to hold tens of thousands of rows at once stops responding,
-/// so the rest waits behind a "Show more" row.
-private struct CappedRows<Item: Identifiable, Row: View>: View {
+/// so the rest waits behind a "Show more" row. Builds O(shown) rows; `id` must be unique across the whole List.
+private struct CappedRows<Item, ID: Hashable, Row: View>: View {
     private static var pageSize: Int { 500 }
 
     let items: [Item]
+    let id: (Item) -> ID
     @ViewBuilder let row: (Item) -> Row
     @State private var shown = pageSize
 
     var body: some View {
-        ForEach(items.prefix(shown)) { row($0) }
+        // A lazy map: the keyed rows are made as the List asks for them, with no copy of the page.
+        ForEach(items.prefix(shown).lazy.map { KeyedRow(id: id($0), item: $0) }) { row($0.item) }
         if items.count > shown {
             Button("Show \(min(Self.pageSize, items.count - shown)) more · \(items.count - shown) hidden") {
                 shown += Self.pageSize
@@ -257,122 +298,9 @@ private struct CappedRows<Item: Identifiable, Row: View>: View {
     }
 }
 
-private struct ChangeRow: View {
-    let change: GitChange
-    let staged: Bool
-    /// A flat list shows where the file lives; inside a folder row that is redundant.
-    let showsFolder: Bool
-    let app: AppModel
-    let repository: RepositoryModel
-    @Binding var discarding: [GitChange]
-
-    private var status: GitFileStatus { staged ? change.index : change.worktree }
-    private var name: String { (change.path as NSString).lastPathComponent }
-    private var folder: String { (change.path as NSString).deletingLastPathComponent }
-    private var subtitle: String? {
-        if let original = change.originalPath { return "from \(original)" }
-        return showsFolder && !folder.isEmpty ? folder : nil
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(status.symbol)
-                .font(.caption.monospaced().weight(.bold))
-                .frame(width: 16)
-                .foregroundStyle(.theme(color))
-                .accessibilityLabel(label)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(name).lineLimit(1)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.theme(.textSubtle))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-            }
-            Spacer(minLength: 4)
-            Button {
-                app.run {
-                    if staged { try await repository.changes.unstage(change) } else { try await repository.changes.stage([change.path]) }
-                }
-            } label: {
-                Image(systemName: staged ? "minus.circle" : "plus.circle")
-            }
-            .buttonStyle(.borderless)
-            .help(staged ? "Unstage \(name) (Space)" : "Stage \(name) (Space)")
-            .accessibilityIdentifier("\(staged ? "unstage" : "stage")-\(change.path)")
-        }
-        .padding(.vertical, 1)
-        .contextMenu {
-            Button(staged ? "Unstage" : "Stage") {
-                app.run { staged ? try await repository.changes.unstage(change) : try await repository.changes.stage([change.path]) }
-            }
-            if !staged {
-                Button("Discard Changes…", role: .destructive) { discarding = [change] }
-            }
-            Divider()
-            Menu("Ignore") {
-                Button("Add to .gitignore") { ignore(.gitignore) }
-                Button("Add to Local Exclude (.git/info/exclude)") { ignore(.localExclude) }
-            }
-            Menu("Stash This File") {
-                Button("Stash…") { stash(includeUntracked: change.kind == .untracked) }
-            }
-            Button("File History") {
-                repository.section = .history
-                repository.history.filter = GitLogFilter(path: change.path, followRenames: true)
-                Task { await repository.history.reload() }
-            }
-            Divider()
-            Button("Open File") { NSWorkspace.shared.open(repository.root.appendingPathComponent(change.path)) }
-                .disabled(change.worktree == .deleted)
-            Button("Copy Path") { Clipboard.copy(change.path) }
-            Button("Show in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([repository.root.appendingPathComponent(change.path)])
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("change-\(staged ? "staged" : "unstaged")-\(change.path)")
-    }
-
-    private func ignore(_ scope: IgnoreScope) {
-        let path = change.path
-        app.run { try await repository.perform("Ignoring…") { client, _ in try client.ignore([path], scope: scope) } }
-    }
-
-    private func stash(includeUntracked: Bool) {
-        let path = change.path
-        repository.ask(PendingPrompt(title: "Stash \(name)", message: "A name helps you find it later (optional).",
-                                     placeholder: "Message", confirmTitle: "Stash") { message in
-            app.run {
-                try await repository.perform("Stashing…") { client, _ in
-                    try client.stashPush(message: message, includeUntracked: includeUntracked, paths: [path])
-                }
-            }
-        })
-    }
-
-    private var color: LFThemeToken {
-        switch status {
-        case .added, .untracked: .accentText
-        case .deleted: .danger
-        case .renamed, .copied: .info
-        default: .warning
-        }
-    }
-
-    private var label: String {
-        switch status {
-        case .added: "added"
-        case .untracked: "untracked"
-        case .deleted: "deleted"
-        case .renamed: "renamed"
-        case .copied: "copied"
-        case .modified: "modified"
-        default: "changed"
-        }
-    }
+private struct KeyedRow<ID: Hashable, Item>: Identifiable {
+    let id: ID
+    let item: Item
 }
 
 #if DEBUG

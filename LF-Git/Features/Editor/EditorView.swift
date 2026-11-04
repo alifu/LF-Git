@@ -106,7 +106,7 @@ struct EditorView: View {
                             .accessibilityIdentifier("mark-resolved")
                     }
                     Button("Save") { EditorActions.save(editor, repository: repository, app: app) }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.prominentPill)
                         .disabled(!editor.hasUnsavedChanges || editor.isSaving)
                         .accessibilityIdentifier("save")
                     if editor.isSaving {

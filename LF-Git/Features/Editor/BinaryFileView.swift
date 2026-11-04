@@ -99,7 +99,7 @@ struct BinaryFileView: View {
                 do { try await repository.takeSide(side, of: file.path) } catch { app.report(error) }
             }
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.prominentPill)
         .accessibilityIdentifier(title.lowercased().replacingOccurrences(of: " ", with: "-"))
     }
 

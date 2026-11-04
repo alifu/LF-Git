@@ -42,7 +42,7 @@ struct CompareView: View {
                 Text(title).font(.callout.weight(.semibold)).lineLimit(1)
                 Spacer()
                 Button(action.0) { accept(action.1) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.prominentPill)
                     .controlSize(.small)
             }
             .padding(8)
