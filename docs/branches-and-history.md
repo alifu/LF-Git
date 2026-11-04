@@ -34,6 +34,47 @@
   header and placeholder text instead of collapsing to half the view.
 * Comparisons (`compare(from:to:)`) use `GitClient.diff(of: .range(...))`.
 
+## Three columns (Settings › Layout › Lists)
+
+`layout.lists` (`ListsLayout`) is **Classic** (default) or **Three columns** (`threeColumn`). Classic is described
+above. Three columns affects Branches, History, Stash, Tags and Reflog:
+
+```
+Branches                                        History, Stash, Tags, Reflog
+┌ branches list ─────┐ ┌ one card ─────────────────────────┐   ┌ list (sidebar) ┐ ┌ one card ───────────────────┐
+│ ◎ current target   │ │ commits, day headers │ preview     │   │ commits (day   │ │ files │ diff + blame│
+│ [All|Local|Remote] │ │ Today                │ files │ diff│   │ headers) …     │ │       │             │
+│ search             │ │ ● commit …           │             │   └────────────────┘ └───────────────────────────┘
+│ Local · Remote     │ │ Yesterday            │             │
+└────────────────────┘ └───────────────────────────────────┘
+```
+
+* **Branches** (`BranchesSidebar`): a pinned **current target** row above the search (`current-target`): the checked-out
+  branch (or *Detached HEAD* / *No branch yet*), *tracks …* or *no upstream*, and its ahead/behind badge. It is not
+  a selectable row. A segmented **All / Local / Remote** picker (`branch-scope`) filters the groups; Classic always
+  shows both.
+* **Branches detail** (`BranchesDetail`): one card (`JoinedCards`) with the commit list on the left and the preview on
+  the right. The commit list (300–420 pt) is `CommitListView` with day headers. The preview is `HistoryDetailView`, with
+  nothing selected it shows *Select something to preview* on the dot grid. Classic is a `HSplitView` instead.
+* **History**: the list is the filtered commit list with day headers in its own card (`HistorySidebar`). The detail is
+  `HistoryDetailView` with files │ diff side by side in one card, the file column 180–320 pt. Classic stacks the file
+  list above the diff.
+* **Stash, Tags and Reflog** keep their list. Their detail is `CommitViewerDetail`, which uses `HistoryDetailView`, so
+  they get the same files │ diff.
+* The commit preview on the Lanes canvas (Changes) is always stacked (`forcesStacked`), because 440 pt is too narrow
+  for two columns.
+* Day headers come from `DayGrouping.group` (one pass over the commits already in order): *Today*, *Yesterday*, then
+  the date. The groups are rebuilt only when the commits change or the layout is switched.
+
+## Reflog timeline (Settings › Layout › Reflog)
+
+`layout.timeline` (off by default) turns the Reflog list into a timeline (`ReflogSidebar`, `TimelineRow`):
+
+* Entries are grouped by day (`ReflogTimeline`, rebuilt only when the reflog changes). Each day is a section.
+* Each row has a time column (56 pt), a connector line that is cut at the first and last entry of a day, and a dot.
+  The dot of the current HEAD entry is accent-coloured and marked **Current** (`reflog-current`).
+* Off, the Reflog is the plain list as before. The context menu and the selection are the same in both.
+
 ## Toolbar branch menu
 
 `Repository/RepositoryToolbar.swift` → `BranchMenu`: a button that opens a **popover** with a search field

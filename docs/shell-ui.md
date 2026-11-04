@@ -5,14 +5,51 @@
 ```
 HStack (window color: surfaceSunken)
  ├─ SectionRail                        (side menu, fixed width)
- └─ NavigationSplitView
-      ├─ sidebar  → CardHeader + the list for repository.section, in a white card (.lfCard())
-      └─ detail   → the matching detail in a card, with OperationBanner / BisectBanner on top
+ └─ content, wrapped in ChangesFloatingHost (floating panels; Changes only)
+      ├─ Changes + Classic             → NavigationSplitView (below)
+      ├─ Changes + Inline / Lanes      → ChangesWorkspace (the whole content area, no split view)
+      └─ every other section           → NavigationSplitView
+           ├─ sidebar  → CardHeader + the list for repository.section, in a white card (.lfCard())
+           └─ detail   → the matching detail in a card, with OperationBanner / BisectBanner on top
  + log panel (bottom inset, a card), toolbar pills, dialogs (RepositoryDialogs)
 ```
 
 `repository.section` (`RepositorySection`, defined in `RepositoryModel.swift`) selects what both columns show.
 The look follows the "Clean Plate" design (see README › Design credits); the plan is `plan/side-menu-redesign.plan.md`.
+The layout choices (L1–L8) are in `.claude/plans/gitbutler-layout-redesign.plan.md`; the Inline and Lanes layouts of
+Changes are described in [changes-panel.md](changes-panel.md).
+
+## Layout settings (`Repository/Layout/LayoutPreferences.swift`, `Settings/LayoutSettingsTab.swift`)
+
+Settings › Layout stores three choices in `@AppStorage`. Each is read by the views named below.
+
+| Key | Values (enum) | Default | Read by |
+|---|---|---|---|
+| `layout.changes` | `classic`, `inline`, `lanes` (`ChangesLayout`) | `classic` | `RepositoryView`: anything but Classic shows `ChangesWorkspace` |
+| `layout.lists` | `classic`, `threeColumn` (`ListsLayout`) | `classic` | `BranchesDetail`, `CommitListView` (day headers), `HistoryDetailView` (files │ diff) |
+| `layout.timeline` | on / off (`LayoutPreferences.timelineDefault` = off) | off | `ReflogSidebar` (timeline rows) |
+
+An unknown stored value reads as the default (`ChangesLayout(stored:)`, `ListsLayout(stored:)`). A layout changes
+only the arrangement: the models, git commands and colors are the same in every layout.
+
+## Shared layout pieces (`Repository/Layout/`)
+
+* **`JoinedCards`**: two panes flush inside one card, split by a 1 pt hairline. The leading pane has a width range
+  (default `Chrome.listColumn`…`listColumnMax`, 300–420). Used by the three-column Branches, the file list │ diff of
+  `HistoryDetailView`, and the floating diff.
+* **`CloseButton`** (`JoinedCards.swift`): the ✕ in card headers and panels. It has no Esc shortcut on purpose: a
+  window-wide `.cancelAction` would close the panel while Esc belongs to the commit message or the palette.
+* **`DayGrouping`** (`DayGrouping.swift`): `group(_:date:)` splits a list that is already in order into runs by day,
+  titled *Today*, *Yesterday* or the date. One pass, O(m). A day that comes back after another starts a new group.
+  `ReflogTimeline` (in `Lists/ListsLogic.swift`) uses it for the Reflog; `BranchScope` (All / Local / Remote) and
+  `CurrentTarget` (the pinned summary row) are in the same file.
+* **`HeroPane`** (`HeroPane.swift`): a title, a message, actions and a tinted symbol panel (480 pt). Under about
+  800 pt wide, the panel moves under the text. Only the Dashboard's empty state uses it.
+* **`FloatingPanel`** and **`FloatingPlacement`** (`Layout/Floating/`): a card with a ⠿ handle that drags it, a title
+  and a ✕. It floats over the content area, stays 8 pt inside it, and remembers its position per window with
+  `@SceneStorage` (`floating.<id>.x` / `.y`).
+* **`Chrome`** (`CardStyle.swift`) sizes, measured in the Figma file: `listColumn` 300 (`listColumnMax` 420),
+  `laneWidth` 340, `panelWidth` 440, `settingsSidebar` 240, `settingsContent` 580.
 
 ## Side menu (`Repository/SectionRail.swift`)
 
@@ -72,10 +109,23 @@ Settings > Theme > *Accent color* stores `AccentSetting.storageKey` (`accentColo
   choice changes, so every view and AppKit table rebuilds with the new color. Models are not affected; transient
   view state (open folders, line selection) is reset. Settings only re-tints, so unsaved edits there survive.
 
-## Settings, welcome, theme
+## Settings window (`Settings/SettingsView.swift`)
 
-`Settings/` (accounts, git config, terminal environment, appearance), `Welcome/` (recent repositories, preview
-of a conflict), `Theme/` (`LFThemeToken.generated.swift` from `Design/theme.json`, light/dark/system via
+A sidebar (`SettingsSidebar`, 240 pt) beside one scrolling column of section cards (`SettingsPage` and
+`SettingsCard` in `SettingsCards.swift`, 580 pt), in a window of about 844 × 560. The tabs are `SettingsTab`
+(`SettingsTabs.swift`), in this order: **General**, **Account**, **Network**, **Environment**, **Theme**, **Layout**.
+Each sidebar row has the identifier `settings-tab-<rawValue>`. The selected tab is `@AppStorage("settings.tab")`, so
+the Account button in the side menu still opens the Account tab.
+
+* **Layout** (`LayoutSettingsTab.swift`): three cards with the choices above: *Changes* (`layout-changes-picker`),
+  *Lists* (`layout-lists-picker`) and *Reflog* as a timeline (`layout-timeline-toggle`).
+* The other tabs (`SettingsTabs.swift`): `GeneralSettingsTab` (reopen the last repository), `AccountSettingsTab`,
+  `NetworkSettingsTab`, `EnvironmentSettingsTab` and `ThemeSettingsTab`, each a `SettingsPage` of `SettingsCard`s.
+
+## Welcome and theme
+
+`Settings/` also holds the accounts, git config and terminal environment sections, `Welcome/` (recent repositories,
+preview of a conflict), `Theme/` (`LFThemeToken.generated.swift` from `Design/theme.json`, light/dark/system via
 `AppearanceSetting`).
 
 ## Previews

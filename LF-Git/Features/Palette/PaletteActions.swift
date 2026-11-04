@@ -38,8 +38,8 @@ extension RepositoryModel {
                                         confirmTitle: "Force Push") { app.run { try await self.push(force: true) } })
         })
         git("cancel", "Cancel the Running Action", symbol: "xmark.circle", enabled: isCancellable) { self.cancelBusy() }
-        git("stage-all", "Stage All Changes", symbol: "plus.circle", enabled: !status.unstaged.isEmpty) { try await self.changes.stageAll() }
-        git("unstage-all", "Unstage All Changes", symbol: "minus.circle", enabled: !status.staged.isEmpty) { try await self.changes.unstageAll() }
+        git("stage-all", "Stage All Changes", symbol: "plus.circle", enabled: !changeListing.unstaged.isEmpty) { try await self.changes.stageAll() }
+        git("unstage-all", "Unstage All Changes", symbol: "minus.circle", enabled: !changeListing.staged.isEmpty) { try await self.changes.unstageAll() }
         actions.append(PaletteAction(id: "discard-all", title: "Discard All Changes…", symbol: "trash", isEnabled: !status.isClean) { [self] in
             confirm(PendingConfirmation(title: "Discard every change?",
                                         message: "Edits to tracked files are reverted and untracked files are deleted. This cannot be undone.",

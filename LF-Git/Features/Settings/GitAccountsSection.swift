@@ -1,12 +1,12 @@
 import LFKit
 import SwiftUI
 
-/// Settings section for company (LDAP) logins to git servers.
+/// The controls of the Git server accounts card (token, password or LDAP logins). The card supplies the title.
 struct GitAccountsSection: View {
     @State private var model = GitAccountsModel()
 
     var body: some View {
-        Section {
+        VStack(alignment: .leading, spacing: 8) {
             ForEach(model.accounts) { account in
                 HStack {
                     Image(systemName: "person.badge.key")
@@ -17,10 +17,13 @@ struct GitAccountsSection: View {
                 }
             }
             TextField("Server", text: $model.host, prompt: Text("gitlab.company.com"))
+                .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("account-host")
             TextField("Username", text: $model.username, prompt: Text("Username (for a token: your user name or any name)"))
+                .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("account-username")
             SecureField("Password or access token", text: $model.password)
+                .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("account-password")
             HStack {
                 if let message = model.message {
@@ -31,16 +34,11 @@ struct GitAccountsSection: View {
                     .disabled(!model.canAdd)
                     .accessibilityIdentifier("account-add")
             }
-        } header: {
-            Text("Git server accounts (token, password or LDAP)")
-        } footer: {
-            Text("For a server that signs in with a personal access token (GitHub, GitLab, Bitbucket) or your company (LDAP) account. Enter the token as the password. It is kept by git's credential helper (the macOS keychain), never by this app, so fetch, pull and push work without a prompt. A login you already made in the terminal works without adding it here.")
         }
     }
 }
 
 #Preview("Git server accounts") {
-    Form { GitAccountsSection() }
-        .formStyle(.grouped)
-        .frame(width: 460, height: 420)
+    SettingsPage { GitAccountsSection() }
+        .frame(width: 580, height: 420)
 }

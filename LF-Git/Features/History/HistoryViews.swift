@@ -94,34 +94,40 @@ struct HistorySidebar: View {
     }
 }
 
+/// A commit with its position in the list, which the graph lanes are looked up by.
+nonisolated struct IndexedCommit: Identifiable, Sendable {
+    let index: Int
+    let commit: GitCommit
+
+    var id: GitCommit.ID { commit.id }
+}
+
 /// Commits with the graph and a context menu of everything that can be done to a commit.
 struct CommitListView: View {
     let repository: RepositoryModel
     let app: AppModel
     let model: HistoryModel
     @State private var selected: Set<GitCommit.ID> = []
+    @AppStorage(LayoutPreferences.listsKey) private var listsLayout = ListsLayout.default.rawValue
+    /// Day groups for the three-column layout, rebuilt only when the list changes (not on every body evaluation).
+    @State private var dayGroups: [DayGroup<IndexedCommit>] = []
 
     static let rowHeight: CGFloat = 38
 
+    private var showsDays: Bool { ListsLayout(stored: listsLayout) == .threeColumn }
+
     var body: some View {
         List(selection: $selected) {
-            ForEach(Array(model.commits.enumerated()), id: \.element.id) { index, commit in
-                CommitRow(commit: commit, row: model.graph.rows.indices.contains(index) ? model.graph.rows[index] : nil,
-                          currentBranch: repository.status.branch,
-                          isCopied: repository.copiedCommits.contains { $0.hash == commit.hash })
-                    .tag(commit.id)
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .contextMenu {
-                        let picked = selected.contains(commit.id) && selected.count > 1
-                            ? model.commits.filter { selected.contains($0.id) } : [commit]
-                        CommitContextMenu(repository: repository, app: app, model: model, commits: picked)
+            if showsDays {
+                ForEach(dayGroups) { group in
+                    Section(group.title) {
+                        ForEach(group.items) { commitRow($0.commit, index: $0.index) }
                     }
-                    .onAppear {
-                        if index >= model.commits.count - 20 {
-                            Task { await model.loadMore() }
-                        }
-                    }
+                }
+            } else {
+                ForEach(Array(model.commits.enumerated()), id: \.element.id) { index, commit in
+                    commitRow(commit, index: index)
+                }
             }
             if model.isLoading {
                 ProgressView().frame(maxWidth: .infinity).listRowSeparator(.hidden)
@@ -130,6 +136,8 @@ struct CommitListView: View {
         .listStyle(.plain)
         .environment(\.defaultMinListRowHeight, Self.rowHeight)
         .accessibilityIdentifier("history-list")
+        .onChange(of: model.commits, initial: true) { refreshDays() }
+        .onChange(of: showsDays) { refreshDays() }
         .onChange(of: selected) {
             if selected.count == 1, let only = selected.first, only != model.selection {
                 Task { await model.select(only) }
@@ -144,6 +152,37 @@ struct CommitListView: View {
                                        systemImage: "clock.arrow.circlepath")
             }
         }
+    }
+
+    /// Regroups by day. Runs only when the commits really changed (`onChange`) or the layout was switched, and only
+    /// while day headers are shown: O(m) for m commits per change, nothing per render. No memo: a commit's refs can
+    /// change without the list's count or ends changing, and a memo keyed on those showed stale labels.
+    private func refreshDays() {
+        guard showsDays else {
+            dayGroups = []
+            return
+        }
+        let indexed = model.commits.enumerated().map { IndexedCommit(index: $0.offset, commit: $0.element) }
+        dayGroups = DayGrouping.group(indexed, date: { $0.commit.date })
+    }
+
+    private func commitRow(_ commit: GitCommit, index: Int) -> some View {
+        CommitRow(commit: commit, row: model.graph.rows.indices.contains(index) ? model.graph.rows[index] : nil,
+                  currentBranch: repository.status.branch,
+                  isCopied: repository.copiedCommits.contains { $0.hash == commit.hash })
+            .tag(commit.id)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .contextMenu {
+                let picked = selected.contains(commit.id) && selected.count > 1
+                    ? model.commits.filter { selected.contains($0.id) } : [commit]
+                CommitContextMenu(repository: repository, app: app, model: model, commits: picked)
+            }
+            .onAppear {
+                if index >= model.commits.count - 20 {
+                    Task { await model.loadMore() }
+                }
+            }
     }
 }
 
@@ -194,8 +233,12 @@ struct HistoryDetailView: View {
     let repository: RepositoryModel
     let app: AppModel
     let model: HistoryModel
+    /// Files above the diff whatever the lists layout: a narrow panel (the 440pt commit preview on the lanes canvas)
+    /// has no room for files and diff side by side.
+    var forcesStacked = false
     @State private var lineSelection: Set<Int> = []
     @AppStorage("diff.showsBlame") private var showsBlame = true
+    @AppStorage(LayoutPreferences.listsKey) private var listsLayout = ListsLayout.default.rawValue
 
     var body: some View {
         Group {
@@ -215,6 +258,20 @@ struct HistoryDetailView: View {
         VStack(spacing: 0) {
             header()
             Divider()
+            filesAndDiff
+        }
+    }
+
+    /// Classic: files above the diff. Three columns: files │ diff in one card.
+    @ViewBuilder
+    private var filesAndDiff: some View {
+        if !forcesStacked && ListsLayout(stored: listsLayout) == .threeColumn {
+            JoinedCards(leadingWidth: 180...320) {
+                fileList
+            } trailing: {
+                content
+            }
+        } else {
             VSplitView {
                 fileList
                     .frame(minHeight: 90, idealHeight: 130)

@@ -36,14 +36,19 @@ final class ChangesModel {
 
     var status: GitStatus { repository?.status ?? GitStatus() }
 
+    /// The lists and lookups made once per refresh. Read these instead of `status.staged` / `status.unstaged`,
+    /// which filter every entry on each call: O(1) here against O(n) there.
+    private var listing: ChangeListing { repository?.changeListing ?? .empty }
+
+    /// Evaluated on every keystroke in the commit box, so it must not walk the change list.
     var canCommit: Bool {
         let hasMessage = !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return hasMessage && (amend || !status.staged.isEmpty) && !isCommitting
+        return hasMessage && (amend || !listing.staged.isEmpty) && !isCommitting
     }
 
+    /// O(1): a dictionary lookup in the listing.
     func change(for selection: ChangeSelection) -> GitChange? {
-        let list = selection.staged ? status.staged : status.unstaged
-        return list.first { $0.path == selection.path }
+        listing.change(path: selection.path, staged: selection.staged)
     }
 
     // MARK: - Selection and diff

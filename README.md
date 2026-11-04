@@ -74,6 +74,8 @@ terminal, and the **log panel** (⇧⌘L, or the terminal button in the side men
 
 **Side menu:** the sections are icon tiles down the left of the window: **Changes**, **Branches** and **History** on top, the others below a rule, with counts on the tiles (⌃1 … ⌃0 also switch). **Conflicts** appears only while files are conflicted. The log panel, Settings and the Git account sit at the bottom. The section's list and its detail are two cards beside it.
 
+**Layouts:** Settings › Layout switches how **Changes** arranges the file list and the diff (Classic, Inline preview or Lanes), how **Branches** and **History** (with Stash, Tags and Reflog) place the commits beside the preview (Classic or Three columns), and whether the **Reflog** is a day-grouped timeline. Classic is the default, and the other layouts only change the arrangement, not what the app can do.
+
 **Toolbar:** pills for the upstream and when it was last fetched (click to fetch; its menu pulls or reloads), a filled **"N upstream commits"** button that pulls while the branch is behind, Push with the waiting count, the project (switch to a recent repository, open, close) joined to the branch menu (a popover with a **search box**: type, press Return to switch to the first match), **Fetch**, **Pull** (fast-forward only, merge or rebase), **Push** (and **force push with
 lease**) with ahead/behind counts. Fetch, pull, push and other network commands show a **Cancel** button and stop
 by themselves after 5 minutes; git never prompts for a password. A merge, rebase, cherry-pick or revert that stops
@@ -103,7 +105,7 @@ palette and run in the repository (`$LFGIT_REPO`, `$LFGIT_BRANCH` are set):
 { "customCommands": [ { "name": "Prune merged branches", "command": "git branch --merged | grep -v '\\*' | xargs git branch -d" } ] }
 ```
 
-**Settings (⌘,)** has four tabs: **Account** (commit author and git server accounts), **Network** (SSL verification), **Environment** (terminal environment) and **Theme** (dark mode and accent color):
+**Settings (⌘,)** has a sidebar of six tabs: **General** (reopen the last repository), **Account** (commit author and git server accounts), **Network** (SSL verification), **Environment** (terminal environment), **Theme** (dark mode and accent color) and **Layout** (the arrangements above). The table lists the settings with their tab:
 
 | Setting (tab) | What it does |
 |---|---|
@@ -306,7 +308,8 @@ MIT, see [LICENSE](LICENSE).
 
 The window layout (side menu, card panes, toolbar pills) and the warm-neutral and teal palette are adapted from
 **[GitButler Desktop 3.5](https://www.figma.com/community/file/1681830162435296285/gitbutler-desktop-3-5)** by
-GitButler, published on the Figma Community.
+GitButler, published on the Figma Community. The alternative layouts (Inline preview, Lanes, Three columns, the Reflog
+timeline and the Settings sidebar) follow the same file.
 
 * **Usage rights:** files published to the Figma Community are shared under
   [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/), which

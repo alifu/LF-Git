@@ -7,17 +7,31 @@ struct BranchesSidebar: View {
     @Bindable var repository: RepositoryModel
     let app: AppModel
     @State private var query = ""
+    @AppStorage(LayoutPreferences.listsKey) private var listsLayout = ListsLayout.default.rawValue
+    @State private var scope = BranchScope.all
     /// Sections, remotes and folders the user closed; everything is open by default.
     @State private var collapsed: Set<String> = []
 
-    private var locals: [GitBranch] { repository.branches.filter { !$0.isRemote } }
-    private var remotes: [GitBranch] { repository.branches.filter(\.isRemote) }
+    private var isThreeColumn: Bool { ListsLayout(stored: listsLayout) == .threeColumn }
+    /// The scope only applies in the three-column layout; Classic always shows both groups.
+    private var activeScope: BranchScope { isThreeColumn ? scope : .all }
+    private var locals: [GitBranch] { activeScope.showsLocal ? repository.branches.filter { !$0.isRemote } : [] }
+    private var remotes: [GitBranch] { activeScope.showsRemote ? repository.branches.filter(\.isRemote) : [] }
+    private var currentTarget: CurrentTarget {
+        let status = repository.status
+        return CurrentTarget(branch: status.branch, upstream: status.upstream, ahead: status.ahead, behind: status.behind,
+                             isDetached: status.isDetached)
+    }
     private var searchText: String { query.trimmingCharacters(in: .whitespaces) }
     private var isSearching: Bool { !searchText.isEmpty }
 
     var body: some View {
         VStack(spacing: 0) {
             actionBar
+            if isThreeColumn {
+                CurrentTargetRow(target: currentTarget)
+                scopePicker
+            }
             searchField
             List(selection: $repository.branchSelection) {
                 localSection
@@ -61,6 +75,17 @@ struct BranchesSidebar: View {
                 .accessibilityIdentifier("branches-collapse-all")
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var scopePicker: some View {
+        Picker("Show", selection: $scope) {
+            ForEach(BranchScope.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .padding(.horizontal, 10)
+        .padding(.bottom, 6)
+        .accessibilityIdentifier("branch-scope")
     }
 
     private var searchField: some View {
@@ -192,6 +217,28 @@ struct BranchesSidebar: View {
     }
 }
 
+/// The pinned summary above the list: the checked-out branch, its upstream and how far apart they are.
+private struct CurrentTargetRow: View {
+    let target: CurrentTarget
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "scope").foregroundStyle(.theme(.accent)).frame(width: 18)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(target.title).fontWeight(.semibold).lineLimit(1).truncationMode(.middle)
+                Text(target.detail).font(.caption).foregroundStyle(.theme(.textSubtle)).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 4)
+            TrackingBadge(ahead: target.ahead, behind: target.behind)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.theme(.surfaceRaised))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("current-target")
+    }
+}
+
 /// Folders of branch names (`feature/login`) and the branches inside them, one level at a time.
 private struct BranchTreeRows<Row: View>: View {
     let nodes: [PathNode<GitBranch>]
@@ -277,15 +324,38 @@ struct TrackingBadge: View {
 struct BranchesDetail: View {
     let repository: RepositoryModel
     let app: AppModel
+    @AppStorage(LayoutPreferences.listsKey) private var listsLayout = ListsLayout.default.rawValue
+
+    private var history: HistoryModel { repository.branchHistory }
 
     var body: some View {
-        HSplitView {
-            CommitListView(repository: repository, app: app, model: repository.branchHistory)
-                .frame(minWidth: 300, idealWidth: 380)
-            HistoryDetailView(repository: repository, app: app, model: repository.branchHistory)
-                .frame(minWidth: 320)
+        if ListsLayout(stored: listsLayout) == .threeColumn {
+            JoinedCards {
+                CommitListView(repository: repository, app: app, model: history)
+            } trailing: {
+                preview
+            }
+            .accessibilityIdentifier("branches-three-column")
+        } else {
+            HSplitView {
+                CommitListView(repository: repository, app: app, model: history)
+                    .frame(minWidth: 300, idealWidth: 380)
+                HistoryDetailView(repository: repository, app: app, model: history)
+                    .frame(minWidth: 320)
+            }
+            .background(.theme(.background))
         }
-        .background(.theme(.background))
+    }
+
+    @ViewBuilder
+    private var preview: some View {
+        if history.selectedCommit == nil && history.comparison == nil {
+            EmptyPane("Select something to preview", symbol: "doc.text.magnifyingglass",
+                      message: "Pick a commit to see its files and diff.")
+                .background(DotGridBackground())
+        } else {
+            HistoryDetailView(repository: repository, app: app, model: history)
+        }
     }
 }
 
