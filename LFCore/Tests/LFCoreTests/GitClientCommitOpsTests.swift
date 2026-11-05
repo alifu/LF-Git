@@ -59,6 +59,21 @@ struct GitClientCommitOpsTests {
         #expect(try subjects(client) == ["five", "four", "three", "TWO", "one"])
     }
 
+    @Test("resetting the author takes the configured user and leaves other commits alone")
+    func resetAuthor() throws {
+        let (fixture, client, commits) = try linearHistory()
+        defer { withExtendedLifetime(fixture) {} }
+        try fixture.git.run(["config", "user.name", "New Person"])
+        try fixture.git.run(["config", "user.email", "new@example.com"])
+
+        try client.resetAuthor(of: try commit("three", in: commits))
+
+        let authors = try fixture.git.run(["log", "--format=%an <%ae>"]).text.split(separator: "\n").map(String.init)
+        #expect(authors == ["Test <test@example.com>", "Test <test@example.com>", "New Person <new@example.com>",
+                            "Test <test@example.com>", "Test <test@example.com>"])
+        #expect(try subjects(client) == ["five", "four", "three", "two", "one"])
+    }
+
     @Test("a commit is dropped")
     func drop() throws {
         let (fixture, client, commits) = try linearHistory()

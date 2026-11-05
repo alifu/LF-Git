@@ -214,10 +214,11 @@ private struct CommitRow: View {
                             .accessibilityLabel("copied for cherry-pick")
                     }
                 }
-                Text("\(commit.authorName) · \(commit.date.formatted(.relative(presentation: .named))) · \(commit.shortHash)")
+                Text("\(commit.authorName) · \(commit.date.formatted(date: .abbreviated, time: .shortened)) (\(commit.date.formatted(.relative(presentation: .named)))) · \(commit.shortHash)")
                     .font(.caption)
                     .foregroundStyle(.theme(.textSubtle))
                     .lineLimit(1)
+                    .help(commit.date.formatted(date: .complete, time: .standard))
             }
             Spacer(minLength: 0)
         }
@@ -323,7 +324,7 @@ struct HistoryDetailView: View {
     }
 
     private var fileList: some View {
-        List(selection: Binding(get: { model.selectedFile }, set: { path in Task { await model.selectFile(path) } })) {
+        List(selection: fileSelection) {
             ForEach(model.files) { file in
                 HStack(spacing: 8) {
                     Text(file.status.symbol)
@@ -349,6 +350,26 @@ struct HistoryDetailView: View {
                 Text("No file changes").foregroundStyle(.theme(.textSubtle))
             }
         }
+    }
+
+    /// Clicking the list's empty area deselects; a commit always shows one file, so a nil (or the same file again)
+    /// is ignored instead of collapsing the diff to its placeholder.
+    private var fileSelection: Binding<String?> {
+        Binding(get: { model.selectedFile }, set: { path in
+            guard let path, path != model.selectedFile else { return }
+            Task { await model.selectFile(path) }
+        })
+    }
+
+    /// The before and after of the selected file, to preview it when it is binary (an image, a PDF).
+    private var binarySides: BinarySides? {
+        guard let path = model.selectedFile else { return nil }
+        let original = model.files.first { $0.path == path }?.originalPath
+        if let comparison = model.comparison {
+            return .revisions(root: repository.root, from: comparison.from, to: comparison.to, path: path, originalPath: original)
+        }
+        guard let commit = model.selectedCommit else { return nil }
+        return .revisions(root: repository.root, from: commit.parents.first, to: commit.hash, path: path, originalPath: original)
     }
 
     private func showHistory(of path: String) {
@@ -382,7 +403,7 @@ struct HistoryDetailView: View {
                     Divider()
                     DiffContentView(diff: diff, lineSelection: $lineSelection, blame: model.blameByLine, showsBlame: showsBlame)
                 } else {
-                    DiffContentView(diff: diff, blame: model.blameByLine, showsBlame: showsBlame)
+                    DiffContentView(diff: diff, blame: model.blameByLine, showsBlame: showsBlame, binarySides: binarySides)
                 }
             } else if let error = model.detailError {
                 ContentUnavailableView("Cannot show this", systemImage: "exclamationmark.triangle", description: Text(error))

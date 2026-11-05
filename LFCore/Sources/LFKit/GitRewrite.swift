@@ -26,6 +26,15 @@ extension GitClient {
         finished = true
     }
 
+    /// Makes the configured user (`user.name`/`user.email`) the commit's author; the message and changes stay.
+    public func resetAuthor(of commit: GitCommit) throws {
+        let amend = "exec git commit --amend -q --no-verify --no-edit --allow-empty --reset-author"
+        try rewrite(from: commit.parents.first) { range in
+            try Self.require(range.first?.hash == commit.hash, "That commit is not on the current branch.")
+            return range.flatMap { ["pick \($0.hash)"] + ($0.hash == commit.hash ? [amend] : []) }
+        }
+    }
+
     public func dropCommit(_ commit: GitCommit) throws {
         try rewrite(from: commit.parents.first) { range in
             try Self.require(range.first?.hash == commit.hash, "That commit is not on the current branch.")

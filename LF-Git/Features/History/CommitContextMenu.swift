@@ -47,6 +47,9 @@ struct CommitContextMenu: View {
         if canRewrite {
             Section("Rewrite History") {
                 Button("Reword…") { reword() }
+                Button("Reset Author to Current User…") {
+                    rewrite("Reset Author", commit, "gets you (user.name and user.email) as its author, dated now") { try $0.resetAuthor(of: commit) }
+                }
                 Button("Edit (stop here)") { act("Starting edit…") { try $0.editCommit(commit) } }
                 Button("Squash into Previous…") { rewrite("Squash", commit, "is combined with the commit before it, keeping both messages") { try $0.squashCommit(commit) } }
                     .disabled(isLast)
