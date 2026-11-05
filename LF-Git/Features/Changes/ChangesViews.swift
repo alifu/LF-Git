@@ -233,7 +233,9 @@ struct ChangesDetailView: View {
         if let diff = changes.diff {
             DiffContentView(diff: diff, hunkAction: hunkAction(selection: selection, change: change),
                             lineSelection: canPickLines(selection: selection, change: change) ? $lineSelection : nil,
-                            onSpace: { stageSelectedLines(selection: selection, change: change, diff: diff) })
+                            onSpace: { stageSelectedLines(selection: selection, change: change, diff: diff) },
+                            binarySides: .workingTree(root: repository.root, path: change.path, staged: selection.staged,
+                                                      isNew: change.kind == .untracked || (selection.staged ? change.index : change.worktree) == .added))
         } else if let error = changes.diffError {
             ContentUnavailableView("Cannot show the diff", systemImage: "exclamationmark.triangle", description: Text(error))
         } else {
@@ -285,9 +287,13 @@ struct DiffContentView: View {
     var blame: [Int: GitBlameLine] = [:]
     var showsBlame = true
     var onSpace: (() -> Void)?
+    /// Where to read the two versions of a binary file from, to preview them (images, PDFs).
+    var binarySides: BinarySides?
 
     var body: some View {
-        if diff.index.isBinary {
+        if diff.index.isBinary, let binarySides {
+            BinaryDiffView(sides: binarySides)
+        } else if diff.index.isBinary {
             ContentUnavailableView("Binary file", systemImage: "doc.zipper", description: Text("A binary file has no line diff."))
         } else if !diff.isDisplayable {
             ContentUnavailableView("Cannot show this diff", systemImage: "doc.questionmark",

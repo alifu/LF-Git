@@ -7,11 +7,12 @@ import UniformTypeIdentifiers
 struct BinaryPreview: View {
     let version: BinaryVersion
     let fileName: String
+    var missingText = "Deleted on this side"
 
     var body: some View {
         switch version.kind {
         case .missing:
-            placeholder(symbol: "trash", text: "Deleted on this side")
+            placeholder(symbol: "trash", text: missingText)
         case .image:
             if let image = version.image {
                 Image(nsImage: image).resizable().scaledToFit().padding(4)
