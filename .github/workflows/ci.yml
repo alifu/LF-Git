@@ -68,6 +68,7 @@ jobs:
           xcodebuild -project LF-Git.xcodeproj -scheme LF-Git \
             -destination 'platform=macOS' \
             -only-testing:LF-GitTests \
+            -parallel-testing-enabled NO \
             CODE_SIGN_IDENTITY=- \
             test
 
