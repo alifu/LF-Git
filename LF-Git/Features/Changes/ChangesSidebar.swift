@@ -80,6 +80,7 @@ struct ChangesSidebar: View {
             }
             .accessibilityIdentifier("changes-list")
             .onKeyPress(.space) { toggleStage() }
+            .onDeleteCommand(perform: discardSelected)
             // `initial`: a list made while a file is already selected (another layout, the pop-out diff, coming back to
             // Changes) highlights it at once, so Space works without clicking the row again.
             .onChange(of: changes.selection, initial: true) { syncPicked() }
@@ -93,10 +94,11 @@ struct ChangesSidebar: View {
             isPresented: Binding(get: { !discarding.isEmpty }, set: { if !$0 { discarding = [] } }),
             titleVisibility: .visible
         ) {
-            Button("Discard Changes", role: .destructive) {
+            Button("Discard Changes") {
                 let targets = discarding
                 app.run { try await changes.discard(targets) }
             }
+            .keyboardShortcut(.defaultAction)
         } message: {
             Text("This cannot be undone. Untracked files are deleted.")
         }
@@ -185,6 +187,13 @@ struct ChangesSidebar: View {
     }
 
     /// Stages the selected unstaged files and unstages the selected staged ones; a selected folder stands for its files.
+    /// Delete: asks to discard the selected files that are not staged (a staged file has to be unstaged first).
+    private func discardSelected() {
+        let targets = selectedFiles().filter { !$0.0.staged }.map(\.1)
+        guard !targets.isEmpty else { return }
+        discarding = targets
+    }
+
     private func toggleStage() -> KeyPress.Result {
         let targets = selectedFiles()
         guard !targets.isEmpty else { return .ignored }

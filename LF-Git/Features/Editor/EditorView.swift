@@ -39,7 +39,8 @@ struct EditorView: View {
         }
         .onAppear { if editor.focusedConflict == nil { editor.focusNext() } }
         .confirmationDialog("Re-merge \(file.name)?", isPresented: $confirmRemerge) {
-            Button("Re-merge and discard my resolutions", role: .destructive) { remerge() }
+            Button("Re-merge and discard my resolutions") { remerge() }
+                .keyboardShortcut(.defaultAction)
         } message: {
             Text("Re-merging rewrites the file from git's index; the resolutions you have not saved are lost.")
         }

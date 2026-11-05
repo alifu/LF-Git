@@ -179,6 +179,41 @@ final class LazygitUITests: GitUITestCase {
                       "the files are restored")
     }
 
+    func testReturnConfirmsTheDiscardDialog() throws {
+        try commitHistory("base")
+        try write("src/a.txt", "a\n")
+        try git("add", "-A")
+        try git("commit", "-q", "-m", "src")
+        try write("src/a.txt", "a2\n")
+        let app = launch(appearance: "light")
+        let folder = folderRow(app, "unstaged", "src/")
+        XCTAssertTrue(folder.waitForExistence(timeout: 10))
+
+        folder.rightClick()
+        app.menuItems["Discard Changes in Folder…"].firstMatch.click()
+        XCTAssertTrue(app.sheets.buttons["Discard Changes"].firstMatch.waitForExistence(timeout: 5))
+        app.typeKey(.return, modifierFlags: [])
+
+        XCTAssertTrue(waitUntil { (try? self.git("status", "--porcelain")) == "" },
+                      "Return confirmed the dialog and restored the files")
+    }
+
+    func testDeleteKeyDiscardsTheSelectedFileAfterConfirming() throws {
+        try commitHistory("base")
+        try write("base.txt", "edited\n")
+        let app = launch(appearance: "light")
+        let row = item(app, "change-unstaged-base.txt")
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+
+        row.click()
+        app.typeKey(.delete, modifierFlags: [])
+        XCTAssertTrue(app.sheets.buttons["Discard Changes"].firstMatch.waitForExistence(timeout: 5), "asks first")
+        XCTAssertNotEqual(try git("status", "--porcelain"), "", "nothing is discarded before confirming")
+        app.typeKey(.return, modifierFlags: [])
+
+        XCTAssertTrue(waitUntil { (try? self.git("status", "--porcelain")) == "" }, "the file is restored")
+    }
+
     func testStageThenUnstageWithTheButtonsLeavesNoStaleRow() throws {
         try commitHistory("base")
         try write("base.txt", "edited\n")

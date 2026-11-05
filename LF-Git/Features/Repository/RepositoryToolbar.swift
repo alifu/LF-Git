@@ -42,9 +42,10 @@ struct BranchMenu: View {
             "Delete \(deleting?.name ?? "branch")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Delete", role: .destructive) {
+            Button("Delete") {
                 if let name = deleting?.name { run { try await repository.deleteBranch(name) } }
             }
+            .keyboardShortcut(.defaultAction)
         } message: {
             Text("Git refuses if the branch has commits that are not merged.")
         }
@@ -359,7 +360,8 @@ struct OperationBanner: View {
             .background(.theme(.surfaceRaised))
             .overlay(alignment: .bottom) { Divider() }
             .confirmationDialog("Abort the \(operation.title.lowercased())?", isPresented: $confirmingAbort, titleVisibility: .visible) {
-                Button("Abort \(operation.title)", role: .destructive) { run { try await repository.abortOperation() } }
+                Button("Abort \(operation.title)") { run { try await repository.abortOperation() } }
+                    .keyboardShortcut(.defaultAction)
             } message: {
                 Text("Everything done by the \(operation.title.lowercased()) so far is undone, including conflict resolutions.")
             }

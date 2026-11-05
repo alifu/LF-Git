@@ -14,6 +14,7 @@ struct RepositoryDialogs: ViewModifier {
                 get: { repository.prompt != nil }, set: { if !$0 { repository.prompt = nil } }), presenting: repository.prompt) { prompt in
                 TextField(prompt.placeholder, text: $promptText)
                 Button(prompt.confirmTitle) { prompt.action(promptText) }
+                    .keyboardShortcut(.defaultAction)
                 Button("Cancel", role: .cancel) {}
             } message: { prompt in
                 Text(prompt.message)
@@ -24,7 +25,9 @@ struct RepositoryDialogs: ViewModifier {
                     get: { repository.confirmation != nil }, set: { if !$0 { repository.confirmation = nil } }),
                 titleVisibility: .visible, presenting: repository.confirmation
             ) { confirmation in
-                Button(confirmation.confirmTitle, role: confirmation.isDestructive ? .destructive : nil, action: confirmation.action)
+                // No .destructive role: SwiftUI never makes such a button the default, so Return would not confirm.
+                Button(confirmation.confirmTitle, action: confirmation.action)
+                    .keyboardShortcut(.defaultAction)
             } message: { confirmation in
                 Text(confirmation.message)
             }
