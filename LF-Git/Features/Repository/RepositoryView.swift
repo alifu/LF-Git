@@ -34,6 +34,7 @@ struct RepositoryView: View {
         .onAppear { repository.startWatching() }
         .onDisappear { repository.stopWatching() }
         .modifier(RepositoryDialogs(repository: repository, app: app, promptText: $promptText, messageText: $messageText))
+        .padding(.top, 1)
     }
 
     /// Changes in the Inline or Lanes layout owns the whole content area; everything else uses the split view.
@@ -87,6 +88,7 @@ struct RepositoryView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
             RemoteButtons(repository: repository, app: app)
+                .padding(.top, 4)
         }
         .withoutGlass()
         ToolbarItem(placement: .principal) {
@@ -95,6 +97,7 @@ struct RepositoryView: View {
                 PillDivider()
                 BranchMenu(repository: repository, app: app)
             }
+            .padding(.top, 4)
         }
         .withoutGlass()
         ToolbarItem(placement: .primaryAction) {
@@ -125,6 +128,7 @@ struct RepositoryView: View {
                 .accessibilityLabel("Close Repository")
                 .accessibilityIdentifier("close-repository-button")
             }
+            .padding(.top, 4)
         }
         .withoutGlass()
     }

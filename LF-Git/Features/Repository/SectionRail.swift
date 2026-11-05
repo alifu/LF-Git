@@ -39,7 +39,7 @@ struct SectionRail: View {
                     ForEach(sections.more) { tile($0) }
                 }
                 // The scroll view clips its content, so the first tile's badge (Changes) needs room above it.
-                .padding(.top, SideMenuTile.badgeOverhang + 2)
+                .padding(.top, SideMenuTile.badgeOverhang + 4)
                 .padding(.bottom, 2)
                 .frame(maxWidth: .infinity)
             }
@@ -125,6 +125,22 @@ struct SideMenuTile: View {
     static let size: CGFloat = 34
     /// How far the count badge sticks out above the tile's top edge.
     static let badgeOverhang: CGFloat = 5
+    /// Above this the number would not fit the tile's corner, so a dot is shown instead.
+    static let maxDigitCount = 99
+    private static let dotSize: CGFloat = 12
+
+    /// The number, or a plain dot once it has too many digits to fit.
+    @ViewBuilder
+    private var badge: some View {
+        if count > Self.maxDigitCount {
+            Circle()
+                .fill(.theme(countFill))
+                .frame(width: Self.dotSize, height: Self.dotSize)
+                .accessibilityHidden(true)
+        } else {
+            CountCapsule(count: count, fill: countFill)
+        }
+    }
 
     let symbol: String
     let title: String
@@ -147,14 +163,14 @@ struct SideMenuTile: View {
                 .shadow(color: .black.opacity(isSelected ? 0.06 : 0), radius: 1, y: 1)
                 .overlay(alignment: .topTrailing) {
                     if count > 0 {
-                        CountCapsule(count: count, fill: countFill).offset(x: 6, y: -Self.badgeOverhang)
+                        badge.offset(x: 6, y: -Self.badgeOverhang)
                     }
                 }
                 .contentShape(RoundedRectangle(cornerRadius: Chrome.tileRadius))
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .help(help ?? title)
+        .help(count > Self.maxDigitCount ? "\(help ?? title) (\(count))" : (help ?? title))
         .accessibilityLabel(title)
         .accessibilityValue(count > 0 ? "\(count)" : "")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
