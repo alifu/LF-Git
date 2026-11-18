@@ -48,11 +48,12 @@ struct ChangesSidebar: View {
                     .accessibilityIdentifier("changes-collapse-all")
             }
             .labelStyle(.iconOnly)
-            // `set: { pick($0) }`, not `set: pick`: the method reference crashes the Swift 6.2 compiler (IRGen).
+            // The plain `$picked` binding, not a `Binding(get:set:)` made in this body: a new closure binding on every
+            // click makes the outline view reload, and the list jumps to the top and loses its open folders.
             // Both sections stay in the list while there is anything to show, even when one of them is empty.
             // Inserting and removing the first section of a sidebar List shifts the second one, and the outline view
             // behind it then misplaces headers and rows (the "sometimes wrong" stage/unstage layout).
-            List(selection: Binding(get: { picked }, set: { pick($0) })) {
+            List(selection: $picked) {
                 if !repository.status.isClean {
                     // `sides` never changes for one list, so these conditions never insert or remove a section.
                     if sides.showsStaged {
@@ -79,6 +80,7 @@ struct ChangesSidebar: View {
                 }
             }
             .accessibilityIdentifier("changes-list")
+            .onChange(of: picked) { _, selection in pick(selection) }
             .onKeyPress(.space) { toggleStage() }
             .onDeleteCommand(perform: discardSelected)
             // `initial`: a list made while a file is already selected (another layout, the pop-out diff, coming back to
@@ -151,10 +153,10 @@ struct ChangesSidebar: View {
 
     /// One selected file shows its diff; several are kept for staging them together.
     private func pick(_ selection: Set<ChangeSelection>) {
-        picked = selection
         if selection.count == 1, let only = selection.first, !only.isFolder {
+            guard only != changes.selection else { return } // a programmatic change that already follows the model
             Task { await changes.select(only) }
-        } else if selection.isEmpty {
+        } else if selection.isEmpty, changes.selection != nil {
             Task { await changes.select(nil) }
         }
     }
@@ -209,7 +211,15 @@ struct ChangesSidebar: View {
     }
 }
 
-/// Folders (open or closed) and the files inside them, one level at a time.
+/// One visible row of the tree: a node and how deep it sits.
+private struct FlatNode {
+    let node: PathNode<GitChange>
+    let depth: Int
+}
+
+/// Folders (open or closed) and the files inside them, as one flat run of rows indented by depth. Not a nested
+/// `DisclosureGroup`: when a refresh removed rows under a folder the outline view was collapsing, SwiftUI's outline
+/// diff hit an assertion and the app crashed. Flat rows leave it nothing to expand or collapse.
 private struct ChangeTreeRows: View {
     let nodes: [PathNode<GitChange>]
     let isStaged: Bool
@@ -218,31 +228,37 @@ private struct ChangeTreeRows: View {
     @Binding var discarding: [GitChange]
     @Binding var collapsed: Set<String>
 
+    private static var indent: CGFloat { 14 }
+
     var body: some View {
         // The same path (file or folder) can be a row in both sections; its identity must say which, or the outline
         // view reuses a row that moved between them (stale highlight, disclosure state or position).
-        CappedRows(items: nodes, id: { ChangeSelection(path: $0.id, staged: isStaged, isFolder: $0.isFolder) }) { node in
-            if let change = node.item {
+        CappedRows(items: visibleRows(nodes, depth: 0), id: { ChangeSelection(path: $0.node.id, staged: isStaged, isFolder: $0.node.isFolder) }) { row in
+            if let change = row.node.item {
                 ChangeRow(change: change, staged: isStaged, showsFolder: false, app: app, repository: repository, discarding: $discarding)
+                    .padding(.leading, CGFloat(row.depth) * Self.indent + Self.indent)
                     .tag(ChangeSelection(path: change.path, staged: isStaged))
             } else {
-                DisclosureGroup(isExpanded: expansion(node)) {
-                    ChangeTreeRows(nodes: node.children ?? [], isStaged: isStaged, repository: repository, app: app,
-                                   discarding: $discarding, collapsed: $collapsed)
-                } label: {
-                    folderLabel(node)
-                }
-                .tag(ChangeSelection(path: node.id, staged: isStaged, isFolder: true))
+                folderLabel(row.node)
+                    .padding(.leading, CGFloat(row.depth) * Self.indent)
+                    .tag(ChangeSelection(path: row.node.id, staged: isStaged, isFolder: true))
             }
+        }
+    }
+
+    /// The rows that are showing: a closed folder hides everything below it.
+    private func visibleRows(_ level: [PathNode<GitChange>], depth: Int) -> [FlatNode] {
+        level.flatMap { node -> [FlatNode] in
+            let row = FlatNode(node: node, depth: depth)
+            guard node.isFolder, !collapsed.contains(key(node)) else { return [row] }
+            return [row] + visibleRows(node.children ?? [], depth: depth + 1)
         }
     }
 
     private func key(_ node: PathNode<GitChange>) -> String { (isStaged ? "staged:" : "unstaged:") + node.id }
 
-    private func expansion(_ node: PathNode<GitChange>) -> Binding<Bool> {
-        Binding(get: { !collapsed.contains(key(node)) }, set: { open in
-            if open { collapsed.remove(key(node)) } else { collapsed.insert(key(node)) }
-        })
+    private func toggleOpen(_ node: PathNode<GitChange>) {
+        if collapsed.contains(key(node)) { collapsed.remove(key(node)) } else { collapsed.insert(key(node)) }
     }
 
     private func toggle(_ files: [GitChange]) {
@@ -257,6 +273,14 @@ private struct ChangeTreeRows: View {
 
     private func folderLabel(_ node: PathNode<GitChange>) -> some View {
         HStack(spacing: 6) {
+            Button { toggleOpen(node) } label: {
+                Image(systemName: collapsed.contains(key(node)) ? "chevron.right" : "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .frame(width: 10)
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.theme(.textSubtle))
+            .accessibilityLabel(collapsed.contains(key(node)) ? "Expand \(node.name)" : "Collapse \(node.name)")
             Image(systemName: "folder").foregroundStyle(.theme(.textSubtle))
             Text(node.name).lineLimit(1).truncationMode(.middle)
                 .accessibilityIdentifier("folder-\(isStaged ? "staged" : "unstaged")-\(node.id)")
