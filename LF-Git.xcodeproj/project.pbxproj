@@ -106,7 +106,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 82C428BF3078FCD200C5A3AD /* Build configuration list for PBXNativeTarget "LF-Git" */;
 			buildPhases = (
-				82C428D73078FCD200C5A3AD /* Remove stale LFKit module */,
 				82C4289A3078FCD100C5A3AD /* Sources */,
 				82C4289B3078FCD100C5A3AD /* Frameworks */,
 				82C4289C3078FCD100C5A3AD /* Resources */,
@@ -243,29 +242,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		82C428D73078FCD200C5A3AD /* Remove stale LFKit module */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Remove stale LFKit module";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/LFKit.swiftmodule",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# Building the lfgit or lf-bench scheme compiles LFKit as plain objects and leaves LFKit.swiftmodule here.\n# The app uses LFKit.framework; that older module would shadow it and hide new LFKit API from the compiler.\nstale=\"${BUILT_PRODUCTS_DIR}/LFKit.swiftmodule\"\nif [ -d \"$stale\" ]; then\n    rm -rf \"$stale\"\n    echo \"Removed $stale, left by a command-line tool build\"\nfi\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		82C4289A3078FCD100C5A3AD /* Sources */ = {

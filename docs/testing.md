@@ -47,8 +47,10 @@ xcodebuild test -scheme LF-Git -destination 'platform=macOS' -only-testing:LF-Gi
 * A Swift 6.2 compiler crash is worked around in `ChangesSidebar.pick` (see [changes-panel.md](changes-panel.md)).
 * Building the `lfgit` or `lf-bench` scheme in Xcode compiles LFKit as plain objects and leaves
   `LFKit.swiftmodule` in the shared `Products/Debug` folder, where it would shadow the `LFKit.framework` module the
-  app uses (new LFKit API then looks missing: "extra argument", "cannot find … in scope"). The app target's first
-  build phase, *Remove stale LFKit module*, deletes it before compiling; the build log says when it did.
+  app uses in Debug (new LFKit API then looks missing: "extra argument", "cannot find … in scope"). Delete
+  `DerivedData/LF-Git-*/Build/Products/Debug/LFKit.swiftmodule` and build again. Release builds (the release workflow,
+  Homebrew) are not affected: there the app links LFKit statically and that module is the current one, so a build
+  step must not delete it.
 
 ## Release checks
 
