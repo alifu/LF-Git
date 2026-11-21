@@ -89,6 +89,8 @@ public struct GitClient: Sendable {
 
     /// How long a fetch, pull or push may run before it is stopped.
     public static let defaultRemoteTimeout: TimeInterval = 300
+    /// How long a push may take when it runs a `pre-push` hook.
+    public static let hookTimeout: TimeInterval = 30 * 60
 
     public init(directory: URL, log: GitCommandLog? = nil) {
         git = Git(directory: directory, log: log)
@@ -284,15 +286,15 @@ public struct GitClient: Sendable {
     /// Pushes the current branch; a branch without an upstream is published with `-u`.
     /// `force` uses `--force-with-lease`: it overwrites the remote branch only if nobody else pushed to it meanwhile.
     /// `runHooks: false` adds `--no-verify`, which skips the `pre-push` hook. `onOutput` receives what hooks
-    /// print while git runs. A `pre-push` hook can take as long as it likes, so no timeout applies then
-    /// (Cancel still stops it).
+    /// print while git runs. A `pre-push` hook (a test suite, a scan) gets `hookTimeout` instead of `timeout`,
+    /// so a slow guardrail finishes but a hung one is still stopped. Cancel works either way.
     public func push(force: Bool = false, runHooks: Bool = true, timeout: TimeInterval? = defaultRemoteTimeout,
                      cancellation: GitCancellation? = nil, onOutput: (@Sendable (String) -> Void)? = nil) throws {
         let remotes = try requireRemote()
         let status = try status()
         guard let branch = status.branch else { throw GitClientError.notOnBranch }
         let flags = (force ? ["--force-with-lease"] : []) + (runHooks ? [] : ["--no-verify"])
-        let effectiveTimeout = runHooks && hasHook(named: "pre-push") ? nil : timeout
+        let effectiveTimeout = runHooks && hasHook(named: "pre-push") ? timeout.map { max($0, Self.hookTimeout) } : timeout
         if status.upstream != nil {
             try git.run(["push", "-q"] + flags, timeout: effectiveTimeout, cancellation: cancellation, onStandardError: onOutput,
                         combineOutput: onOutput != nil)

@@ -35,6 +35,23 @@ struct HookRunTests {
         #expect(HookRun.stripControlSequences("\u{1B}[31mfail\u{1B}[0m\r50%\r100%\r\n") == "fail\n50%\n100%\n")
     }
 
+    @Test("a CRLF or a colour code split across chunks is cleaned like a whole one")
+    func splitAcrossChunks() {
+        let run = HookRun(id: 1, title: "Push")
+            .appending("one\r")
+            .appending("\ntwo \u{1B}[3")
+            .appending("1mred\u{1B}[0m\n")
+
+        #expect(run.text == "one\ntwo red\n")
+    }
+
+    @Test("a held-back carriage return is written when the run ends")
+    func heldBackFlushedOnFinish() {
+        let run = HookRun(id: 1, title: "Push").appending("50%\r").finished(.passed)
+
+        #expect(run.text == "50%\n")
+    }
+
     @Test("output past the limit is cut and flagged")
     func truncation() {
         let run = HookRun(id: 1, title: "Push")
@@ -54,6 +71,19 @@ struct HookRunTests {
         #expect(store.runs.count == HookRunStore.capacity)
         store.clear()
         #expect(store.runs.map(\.id) == [running])
+    }
+
+    @Test("commit hooks default to running and skipping them is kept per repository")
+    func commitPreferences() throws {
+        let defaults = try #require(UserDefaults(suiteName: "HookRunTests-\(UUID().uuidString)"))
+        let preferences = HookPreferences(defaults: defaults)
+        let first = URL(fileURLWithPath: "/tmp/repo-one")
+        #expect(!preferences.skipsCommitHooks(in: first))
+
+        preferences.setSkipsCommitHooks(true, in: first)
+
+        #expect(preferences.skipsCommitHooks(in: first))
+        #expect(!preferences.skipsCommitHooks(in: URL(fileURLWithPath: "/tmp/repo-two")))
     }
 
     @Test("push hooks default to on and the choice is kept per repository")

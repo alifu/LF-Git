@@ -207,6 +207,7 @@ final class RepositoryModel {
         history = HistoryModel()
         branchHistory = HistoryModel()
         commitViewer = HistoryModel()
+        changes.noVerify = HookPreferences().skipsCommitHooks(in: root)
         changes.repository = self
         history.repository = self
         branchHistory.repository = self

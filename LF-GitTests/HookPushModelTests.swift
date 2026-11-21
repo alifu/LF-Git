@@ -65,4 +65,29 @@ struct HookPushModelTests {
         #expect(model.hooks.runs.isEmpty)
         #expect(!model.showsHooksPanel)
     }
+
+    @Test("Skip hooks is remembered for the repository and post-commit output still shows")
+    func commitSkipHooks() async throws {
+        let fixture = try GitFixture()
+        try fixture.commit("a.txt", "1\n", message: "one")
+        for (name, script) in [("pre-commit", "touch \"$(git rev-parse --show-toplevel)/pre-ran\""), ("post-commit", "echo after-commit")] {
+            let hook = fixture.directory.appendingPathComponent(".git/hooks/\(name)")
+            try "#!/bin/sh\n\(script)\n".write(to: hook, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+        }
+        let model = try RepositoryModel.open(at: fixture.directory)
+        await model.refresh()
+        model.changes.noVerify = true
+        defer { model.changes.noVerify = false }
+        fixture.sandbox.write("b.txt", "x\n")
+        try model.client.stage(["b.txt"])
+        await model.refresh()
+        model.changes.commitMessage = "two"
+
+        try await model.changes.commit()
+
+        #expect(!FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("pre-ran").path))
+        #expect(model.hooks.latest?.text.contains("after-commit") == true)
+        #expect(try RepositoryModel.open(at: fixture.directory).changes.noVerify)
+    }
 }

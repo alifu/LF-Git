@@ -24,7 +24,13 @@ final class ChangesModel {
     var commitMessage = ""
     /// How diffs are produced; changing it reloads the diff on screen.
     private(set) var options = DiffOptions()
-    var noVerify = false
+    /// "Skip hooks": commits go out with `--no-verify`. Remembered per repository.
+    var noVerify = false {
+        didSet {
+            guard noVerify != oldValue, let root = repository?.root else { return }
+            HookPreferences().setSkipsCommitHooks(noVerify, in: root)
+        }
+    }
     private(set) var amend = false
     private(set) var isCommitting = false
     /// The message put in the box by turning amend on, so turning it off again can take it back out.
@@ -205,8 +211,9 @@ final class ChangesModel {
         do {
             let skipHooks = noVerify
             var committed = ""
-            try await repository.withHookRun("Commit", hookNames: ["pre-commit", "prepare-commit-msg", "commit-msg", "post-commit"],
-                                             enabled: !skipHooks) { sink in
+            // `--no-verify` skips pre-commit and commit-msg only: prepare-commit-msg and post-commit still run.
+            let hookNames = skipHooks ? Self.unskippableCommitHooks : Self.unskippableCommitHooks + Self.skippableCommitHooks
+            try await repository.withHookRun("Commit", hookNames: hookNames) { sink in
                 committed = try await repository.writeQueue.run {
                     try client.commit(message: message, amend: amend, noVerify: skipHooks, onOutput: sink)
                 }
@@ -223,6 +230,9 @@ final class ChangesModel {
         await repository.refresh()
         return hash
     }
+
+    private static let skippableCommitHooks = ["pre-commit", "commit-msg"]
+    private static let unskippableCommitHooks = ["prepare-commit-msg", "post-commit"]
 
     // MARK: - Work off the main thread
 

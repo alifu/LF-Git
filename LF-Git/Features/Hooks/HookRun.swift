@@ -16,6 +16,10 @@ struct HookRun: Identifiable, Equatable {
     private(set) var state = State.running
     private(set) var ended: Date?
     private(set) var isTruncated = false
+    /// `text.count`, kept so a long run is not recounted for every chunk.
+    private var characterCount = 0
+    /// The end of the last chunk when it might continue in the next one (a lone `\r`, half a colour code).
+    private var heldBack = ""
 
     /// Output kept per run. A chatty guardrail must not grow memory without bound.
     static let characterLimit = 400_000
@@ -27,26 +31,49 @@ struct HookRun: Identifiable, Equatable {
     }
 
     func appending(_ chunk: String) -> HookRun {
-        var copy = self
-        let cleaned = Self.stripControlSequences(chunk)
-        let room = Self.characterLimit - text.count
-        if cleaned.count > room {
-            copy.text += String(cleaned.prefix(max(room, 0)))
-            copy.isTruncated = true
-        } else {
-            copy.text += cleaned
-        }
+        let (complete, tail) = Self.splitUnfinishedTail(heldBack + chunk)
+        var copy = adding(Self.stripControlSequences(complete))
+        copy.heldBack = tail
         return copy
     }
 
     func finished(_ state: State, at date: Date = Date()) -> HookRun {
-        var copy = self
+        var copy = adding(Self.stripControlSequences(heldBack))
+        copy.heldBack = ""
         copy.state = state
         copy.ended = date
         return copy
     }
 
     var duration: TimeInterval? { ended.map { $0.timeIntervalSince(started) } }
+
+    private func adding(_ cleaned: String) -> HookRun {
+        guard !cleaned.isEmpty, !isTruncated else { return self }
+        var copy = self
+        let room = Self.characterLimit - characterCount
+        let length = cleaned.count
+        if length > room {
+            copy.text += String(cleaned.prefix(max(room, 0)))
+            copy.characterCount = Self.characterLimit
+            copy.isTruncated = true
+        } else {
+            copy.text += cleaned
+            copy.characterCount += length
+        }
+        return copy
+    }
+
+    /// Splits off an ending the next chunk may complete: a `\r` that may be the start of `\r\n`, or an escape
+    /// code without its final letter. Swift joins `\r\n` into one character, so a finished pair never matches.
+    static func splitUnfinishedTail(_ text: String) -> (complete: String, tail: String) {
+        if let range = text.range(of: "\u{1B}(\\[[0-9;?]*)?$", options: .regularExpression) {
+            return (String(text[..<range.lowerBound]), String(text[range]))
+        }
+        if text.hasSuffix("\r") {
+            return (String(text.dropLast()), "\r")
+        }
+        return (text, "")
+    }
 
     /// Removes ANSI colour and cursor codes, and turns carriage-return progress redraws into plain lines.
     static func stripControlSequences(_ text: String) -> String {
