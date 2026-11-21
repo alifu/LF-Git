@@ -74,6 +74,7 @@ final class HookRunStore {
     }
 
     func append(_ chunk: String, to id: Int) {
+        guard !chunk.isEmpty else { return }
         update(id) { $0.appending(chunk) }
     }
 

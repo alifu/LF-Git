@@ -106,6 +106,7 @@ nonisolated struct RepositorySnapshot: Sendable {
     let isBisecting: Bool
     let bisectCandidate: String?
     let lastFetchDate: Date?
+    let hasPrePushHook: Bool
 }
 
 /// The repository opened in the window: git state, conflicted files and the actions on whole files.
@@ -292,7 +293,7 @@ final class RepositoryModel {
             isBisecting = snapshot.isBisecting
             bisectCandidate = snapshot.bisectCandidate
             lastFetchDate = snapshot.lastFetchDate
-            hasPrePushHook = client.hasHook(named: "pre-push")
+            hasPrePushHook = snapshot.hasPrePushHook
             lastError = nil
             if !hasChosenSection {
                 hasChosenSection = true
@@ -459,7 +460,7 @@ final class RepositoryModel {
             remotes: try client.remotes(), reflog: try client.reflog(maxCount: 200),
             worktrees: try client.worktrees(), submodules: hasSubmodules ? try client.submodules() : [],
             isBisecting: try client.isBisecting(), bisectCandidate: try client.bisectCandidate(),
-            lastFetchDate: try client.lastFetchDate()
+            lastFetchDate: try client.lastFetchDate(), hasPrePushHook: client.hasHook(named: "pre-push")
         )
     }
 

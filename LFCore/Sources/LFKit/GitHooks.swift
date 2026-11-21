@@ -35,8 +35,13 @@ extension GitClient {
             .sorted { $0.name < $1.name }
     }
 
-    /// Whether git would run a hook of this name.
+    /// Whether git would run a hook of this name. Runs git once: call it off the main thread.
     public func hasHook(named name: String) -> Bool {
-        ((try? hooks()) ?? []).contains { $0.name == name && $0.isExecutable }
+        hasHook(namedAnyOf: [name])
+    }
+
+    /// Whether git would run any of these hooks, from one listing of the hooks directory.
+    public func hasHook(namedAnyOf names: [String]) -> Bool {
+        ((try? hooks()) ?? []).contains { $0.isExecutable && names.contains($0.name) }
     }
 }

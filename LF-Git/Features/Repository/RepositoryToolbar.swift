@@ -245,7 +245,9 @@ struct RemoteButtons: View {
             Button("Force Push (with lease)…") {
                 repository.confirm(PendingConfirmation(
                     title: "Force push \(repository.status.branch ?? "this branch")?",
-                    message: "The remote branch is overwritten, unless somebody else pushed to it since your last fetch.",
+                    message: "The remote branch is overwritten, unless somebody else pushed to it since your last fetch."
+                        + (repository.hasPrePushHook && !repository.runsPushHooks
+                           ? "\n\npre-push hooks are off for this repository: the guardrails will be skipped." : ""),
                     confirmTitle: "Force Push") { run { try await repository.push(force: true) } })
             }
             if repository.hasPrePushHook {
