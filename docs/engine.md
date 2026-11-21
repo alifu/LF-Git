@@ -42,6 +42,7 @@ thread-safe, so the app uses one document from one thread at a time (`EditorMode
 | `GitRemotes.swift`, `GitCredentials.swift`, `GitUserSettings.swift` | remotes, askpass-free credentials, user config |
 | `GitStash.swift`, `GitTags.swift`, `GitWorktrees.swift`, `GitBisect.swift`, `GitRewrite.swift` | the matching areas |
 | `GitCancellation.swift`, `Watchdog.swift` | stop a running command; time limits fire on their own thread |
+| `GitHooks.swift`, `HookShims.swift` | the repository's hooks (`hooks()`, `hasHook`); the `open` / `osascript` stand-ins that run a hook's Terminal actions in place |
 | `LoginEnvironment.swift` | the user's login-shell environment, so hooks and credential helpers behave like in a terminal |
 | `LFDocument.swift`, `LFTypes.swift`, `LFError.swift` | Swift wrappers over the C document, choices (`LFChoice`), errors |
 | `PbxprojMerge.swift`, `ProjectRemerge.swift`, `MergeStrategy.swift` | project-file merging |

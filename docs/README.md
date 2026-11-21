@@ -14,6 +14,7 @@ the [top-level README](../README.md); these pages are for people changing the co
 | [engine.md](engine.md) | `LFCore` (C engine), `LFKit` (git client), `lfgit` CLI |
 | [clone-and-dashboard.md](clone-and-dashboard.md) | cloning from a URL, VPN wait and sign-in, reopening and closing a repository, the dashboard |
 | [shell-ui.md](shell-ui.md) | side menu, cards, toolbar pills, command palette, shortcuts, dialogs |
+| [hooks-panel.md](hooks-panel.md) | the hooks panel, running Terminal guardrails in place, the push/commit hook switches |
 | [testing.md](testing.md) | which tests cover what, how to run them, known quirks |
 
 ## "Where is the code for …?"
@@ -41,6 +42,9 @@ the [top-level README](../README.md); these pages are for people changing the co
 | accepting current / incoming / both | `Editor/EditorModel.swift` → `resolve`, `resolveAll` |
 | the Edit box | `Editor/EditConflictView.swift`, `EditorModel.edit` |
 | image / PDF conflicts | `Editor/BinaryFileView.swift`, `BinaryPreview.swift`, `BinaryVersion.swift` |
+| the hooks panel | `Hooks/HooksPanelView.swift`, `Hooks/HookRun.swift` (`HookRun`, `HookRunStore`) |
+| catching a hook's `open -a Terminal` / `osascript` | `LFKit/HookShims.swift` (the scripts), `Repository/RepositoryModel+Hooks.swift` → `hookShims()` |
+| Run pre-push hooks / Skip hooks | `Repository/RepositoryToolbar.swift` (`pushMenu`), `Hooks/HookPreferences.swift`, `GitClient.push(runHooks:)` |
 | the merge engine | `LFCore/Sources/LFCore/*.c`, header `include/lfcore.h` |
 
 Paths are relative to `LF-Git/Features/` for the app and `LFCore/Sources/` for the engine and git client.

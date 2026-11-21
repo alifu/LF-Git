@@ -31,6 +31,10 @@ xcodebuild test -scheme LF-Git -destination 'platform=macOS' -only-testing:LF-Gi
 * Find things by accessibility identifier: `app.descendants(matching: .any)["change-staged-a.txt"]`.
 * A SwiftUI **popover** (the toolbar branch menu) is not visible to XCUITest; drive it with the keyboard.
 * Alerts with a text field are sheets on macOS (`app.sheets.textFields`).
+* Files the runner writes are quarantined, and git refuses to run a quarantined hook ("cannot exec"). Keep hook
+  scripts as fixtures in the source tree and point `core.hooksPath` at them (`PushHooksUITests`,
+  `Fixtures/guardrail-hooks`).
+* The Push pill is a pop-up button: clicking its middle can open its menu. Press ⌥⌘P to push.
 
 ## Known quirks
 
@@ -41,15 +45,12 @@ xcodebuild test -scheme LF-Git -destination 'platform=macOS' -only-testing:LF-Gi
 * In a full run the heavy `testTwoMillionLineFile` can be followed by "Failed to terminate" errors in other tests;
   they pass when rerun alone.
 * A Swift 6.2 compiler crash is worked around in `ChangesSidebar.pick` (see [changes-panel.md](changes-panel.md)).
+* Building the `lfgit` or `lf-bench` scheme in Xcode compiles LFKit as plain objects and leaves
+  `LFKit.swiftmodule` in the shared `Products/Debug` folder, where it would shadow the `LFKit.framework` module the
+  app uses (new LFKit API then looks missing: "extra argument", "cannot find … in scope"). The app target's first
+  build phase, *Remove stale LFKit module*, deletes it before compiling; the build log says when it did.
 
 ## Release checks
 
 `Scripts/release/check-version.sh` keeps the version in `MARKETING_VERSION`, `lfcore.h` and `Formula/lfgit.rb`
 aligned; `RELEASING.md` has the tag → build → cask flow.
-
-## Building lfgit in Xcode, then the app
-
-The `lfgit` and `lf-bench` schemes compile LFKit as plain objects and leave `LFKit.swiftmodule` in the shared
-`Products/Debug` folder. The app uses `LFKit.framework`, and that older module would shadow it, so new LFKit API
-looked missing ("extra argument", "cannot find … in scope"). The app target's first build phase, *Remove stale LFKit
-module*, deletes it before compiling; the build log says when it did.

@@ -1,29 +1,65 @@
 # Hooks panel
 
-Hooks that a push or commit runs print into a panel inside LF-Git instead of leaving that to terminal windows.
+What a push or commit's hooks print shows in a panel inside the window, and guardrail hooks that would open Terminal
+run their check in place. The user-facing description is in the [README](../README.md) (*Hooks panel*).
 
-* **Panel**: opens above the Log panel when a push or commit starts and the repository has a matching hook
-  (`pre-push`; `pre-commit`, `prepare-commit-msg`, `commit-msg`, `post-commit`). It shows live output, a status chip
-  (running / passed / failed with time), Copy, Clear and a picker for the last 20 runs. Palette: "Show or Hide the
-  Hook Output Panel".
-* **Terminal actions**: guardrail hooks that launch a script in Terminal run it inside the hook instead, and its
-  output appears in the panel between `── Terminal action: … ──` and `── finished (exit N) ──`. No Terminal window
-  opens. LF-Git puts stand-ins for `open` and `osascript` first on the hooks' `PATH`
-  (`~/Library/Application Support/LF-Git/hook-shims`). Caught: `open -a Terminal|iTerm|Warp|Ghostty <script>` (also
-  by app path or `-b` bundle id, with `--args`), `open <file>.command|.tool`, and
-  `osascript -e 'tell application "Terminal" to do script "…"'` / iTerm `write text "…"`. Anything else is passed to
-  the real command unchanged. The action runs to completion before the hook continues and never fails the hook
-  (the real `open` returns 0 at once). Settings › General › Hooks turns it off.
-* **Limits**: a hook that calls `/usr/bin/open` by full path, or launches Terminal some other way, still opens it.
-  Hooks and their actions get no keyboard input (a hook that waits fails instead of hanging). Colour codes are
-  stripped; output is capped.
-* **Timeout**: a push whose repository has a `pre-push` hook may take up to 30 minutes (`GitClient.hookTimeout`)
-  instead of the usual 5, so a slow guardrail finishes and a hung one is still stopped. Cancel works either way.
-* **Output cleaning**: colour codes and `\r` progress redraws are removed, also when one is split across two reads.
-* **Push menu**: "Run pre-push hooks" (shown only when the repo has one). Off pushes with `--no-verify`; the choice
-  is stored per repository in the app's preferences, a shield badge shows on the Push pill, and the Log notes it.
-* **Commit**: the "Skip hooks" checkbox is `--no-verify` and is remembered per repository. Commit hook output goes to
-  the same panel. With hooks skipped, `prepare-commit-msg` and `post-commit` still run (git does not skip them) and
-  still show their output.
+## What happens on a push
 
-Code: `LFKit/GitHooks.swift`, `GitClient.push(runHooks:onOutput:)`, `Features/Hooks/`.
+```
+Push (⌥⌘P / pill)
+  └─ RepositoryModel.push                         Repository/RepositoryModel+Hooks.swift
+       ├─ withHookRun("Push", ["pre-push"])        opens a HookRun + the panel, only if the hook exists
+       ├─ hookShims()                              writes the open/osascript stand-ins (off main), if the setting is on
+       └─ perform → GitClient.push(runHooks:hookShims:onOutput:)
+            └─ git push  ── PATH = shims:…  ──▶ pre-push hook ──▶ `open -a Terminal check.command`
+                                                                    └─ shim runs check.command here
+            stdout + stderr of git and hooks ─▶ onOutput ─▶ HookOutputBuffer ─▶ HookRunStore ─▶ HooksPanelView
+```
+
+A commit takes the same path through `ChangesModel.commit` with the commit hooks.
+
+## Pieces
+
+| Piece | File | Does |
+|---|---|---|
+| Hook discovery | `LFKit/GitHooks.swift` | `hooks()` lists the hooks directory (`git rev-parse --git-path hooks`, so `core.hooksPath`, husky and lefthook count), skipping `*.sample`; `hasHook(named:)`, `hasHook(namedAnyOf:)`. Runs git: call it off the main actor |
+| Output capture | `LFKit/Git.swift` (`combineOutput`), `GitClient.push` / `commit` (`onOutput`) | git's stdout goes into the stderr file, in order, and is streamed by `StandardErrorTailer`. Needed because `pre-push` hooks write to stdout |
+| Skipping hooks | `GitClient.push(runHooks:)`, `commit(noVerify:)` | `--no-verify`. `prepare-commit-msg` and `post-commit` still run (git's rule) |
+| Time limit | `GitClient.hookTimeout` | a push that runs a `pre-push` hook gets 30 min instead of 5; Cancel works either way |
+| Terminal actions | `LFKit/HookShims.swift` | the `open` and `osascript` stand-in scripts, `install(in:)`, `path(prepending:to:)` |
+| Run store | `Hooks/HookRun.swift` | `HookRun` (immutable; output, state, times, 400 000-character cap, colour-code and `\r` cleaning that survives a split between two reads) and `HookRunStore` (last 20 runs) |
+| Wiring | `Repository/RepositoryModel+Hooks.swift` | `withHookRun`, `push`, `hookShims()`, `HookOutputBuffer` (drained before a run's status is set, so the last lines always land first) |
+| Panel | `Hooks/HooksPanelView.swift` | header (status, run menu, Copy, Clear, Close) and auto-scrolling output; above the log panel in `RepositoryView` |
+| Preferences | `Hooks/HookPreferences.swift` | per repository: push hooks off, commit hooks skipped; app-wide: Terminal actions inline (on by default) |
+| Push menu | `Repository/RepositoryToolbar.swift` (`pushMenu`) | *Run pre-push hooks* (only when `hasPrePushHook`), *Show Hook Output*, the shield badge, the force-push warning |
+
+`RepositoryModel.hasPrePushHook` comes from the off-main refresh snapshot, never from a git call on the main actor.
+
+## The Terminal stand-ins
+
+`HookShims.install()` writes two `sh` scripts to `~/Library/Application Support/LF-Git/hook-shims` (only when their
+content changed), and push/commit put that folder first on the hooks' `PATH`.
+
+| The hook runs | The stand-in |
+|---|---|
+| `open -a Terminal\|iTerm\|iTerm2\|Warp\|Ghostty <file>` (name or `.app` path), `open -b <terminal bundle id> <file>`, with `-n -g -F -W` and `--args …` | runs `<file>` with the arguments, in the hook's folder |
+| `open <file>.command` / `.tool` | runs `<file>` |
+| `osascript -e …` telling `Terminal` / `iTerm` / `iTerm2` to `do script "…"` / `write text "…"` (one or several `-e`) | runs each command with `$SHELL -c` |
+| anything else (a URL, another app, a directory, an unknown option, a script it cannot read for certain) | `exec`s the real `/usr/bin/open` / `/usr/bin/osascript` with the same arguments |
+
+The action runs in the foreground between `── Terminal action: … ──` and `── finished (exit N) ──`, and the stand-in
+exits 0 whatever the action returned, as the real command does, so the hook's own logic is unchanged.
+`LFGIT_REAL_OPEN` / `LFGIT_REAL_OSASCRIPT` override the real commands (tests use a recorder).
+
+Limits: a hook that calls `/usr/bin/open` by full path, or sets its own `PATH` first, still opens Terminal. Actions get
+no keyboard input. A long-running action holds the push until the time limit.
+
+## Tests
+
+| Covers | Tests |
+|---|---|
+| hook listing, `combineOutput`, `--no-verify` | `LFCoreTests/GitHooksTests.swift` |
+| each stand-in form, pass-through, exit status, spaces in paths | `LFCoreTests/HookShimsTests.swift` (never reaches Terminal: the real commands are a recorder) |
+| run store, cleaning, cap, preferences | `LF-GitTests/HookRunTests.swift` |
+| push with a rejecting hook, hooks off, no hook, Skip hooks, a Terminal action | `LF-GitTests/HookPushModelTests.swift` |
+| the panel on a real push whose hook runs `open -a Terminal` | `LF-GitUITests/PushHooksUITests.swift` (fixtures in `LF-GitUITests/Fixtures/guardrail-hooks`) |

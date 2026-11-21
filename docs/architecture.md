@@ -23,6 +23,7 @@ SwiftUI views ──▶ @Observable models ──▶ LFKit (GitClient, Git) ─�
 | `RepositoryModel` | `Repository/RepositoryModel.swift` (+`+Actions`, `+Bisect`) | status, branches, stashes, tags, remotes, reflog, conflicted files, one `EditorModel` per file, the write queue, the activity log, pending dialogs |
 | `ChangesModel` | `Changes/ChangesModel.swift` | selected change, the loaded diff, commit message, amend, stage/unstage/hunk/line calls |
 | `HistoryModel` | `History/HistoryModel.swift` | a page of commits, the selected commit, its files, its diff and blame (one instance for History, one for Branches) |
+| `HookRunStore` | `Hooks/HookRun.swift` | the last 20 hook runs of the window (`HookRun`: output, state, times), shown by the hooks panel |
 | `EditorModel` | `Editor/EditorModel.swift` | one conflicted file: per-conflict choices, undo/redo, focus, save |
 
 ## How an action runs

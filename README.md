@@ -57,11 +57,12 @@ xcodebuild -project LF-Git.xcodeproj -scheme LF-Git build
 The window has ten sections, reachable from the grid at the top of the sidebar, with **⌃1 … ⌃0**, or from the
 command palette (**⌘K**): **Changes · Branches · History · Stash · Tags · Remotes · Reflog · Worktrees ·
 Submodules · Conflicts**. Everything runs through your own `git`, so credentials, hooks and signing work as in a
-terminal, and the **log panel** (⇧⌘L, or the terminal button in the side menu) shows what is happening.
+terminal, the **log panel** (⇧⌘L, or the terminal button in the side menu) shows what is happening, and the
+**hooks panel** shows what your push and commit hooks print, including guardrails that would open Terminal.
 
 | Section | What you can do |
 |---|---|
-| **Changes** | Staged and unstaged files in **collapsible sections and folders** (or a flat list; expand/collapse all). **Space** stages or unstages the selected files, and in the diff the selected lines (or the whole file when none is selected); stage/unstage **hunks** (the button on the `@@` row) or **single lines** (click lines, ⇧/⌘-click for several; new files too), discard (lines too), commit, amend, skip hooks, ignore a file (`.gitignore` or local exclude), stash one file, file history. Diff options: ignore whitespace, context size, rename detection |
+| **Changes** | Staged and unstaged files in **collapsible sections and folders** (or a flat list; expand/collapse all). **Space** stages or unstages the selected files, and in the diff the selected lines (or the whole file when none is selected); stage/unstage **hunks** (the button on the `@@` row) or **single lines** (click lines, ⇧/⌘-click for several; new files too), discard (lines too), commit, amend, skip hooks (remembered per repository), ignore a file (`.gitignore` or local exclude), stash one file, file history. Diff options: ignore whitespace, context size, rename detection |
 | **Branches** | **Local and remote branches in separate, collapsible groups** (remote names without `origin/`; folders for `feature/…` names; one group per remote when there are several), a **search box**, and a badge on each local branch with the commits to **pull (↓)** and **push (↑)** as of the last fetch. **Double-click** checks a branch out. The commit list, files, diff and blame are always shown: the newest commit of a branch is selected for you. Checkout, new, rename, delete (local and on the remote), merge (default / no-ff / ff-only / squash), rebase onto, reset (soft/mixed/hard), fast-forward from upstream, set/unset upstream, compare with the current branch |
 | **History** | Graph, filter by message/author/file, **reword, edit, squash, fixup, drop, move up/down**, amend an older commit with staged changes, fixup commits and autosquash, revert, **cherry-pick** (copy commits, paste on another branch), reset, detached checkout, branch/tag from a commit, **bisect**, compare any two commits, file history. The **diff has the blame to its left** (who last changed each line, as of that commit; the *Blame* checkbox hides it). Select lines of any diff and **⌘C** copies them as code (without the `+`/`-` column). Select lines of a commit's diff to apply them, revert them, or cut them out of the commit |
 | **Stash** | Stash all / with untracked / staged only / keep index, apply, pop, drop, rename, branch from stash, browse its diff |
@@ -77,8 +78,9 @@ terminal, and the **log panel** (⇧⌘L, or the terminal button in the side men
 **Layouts:** Settings › Layout switches how **Changes** arranges the file list and the diff (Classic, Inline preview or Lanes), how **Branches** and **History** (with Stash, Tags and Reflog) place the commits beside the preview (Classic or Three columns), and whether the **Reflog** is a day-grouped timeline. Classic is the default, and the other layouts only change the arrangement, not what the app can do.
 
 **Toolbar:** pills for the upstream and when it was last fetched (click to fetch; its menu pulls or reloads), a filled **"N upstream commits"** button that pulls while the branch is behind, Push with the waiting count, the project (switch to a recent repository, open, close) joined to the branch menu (a popover with a **search box**: type, press Return to switch to the first match), **Fetch**, **Pull** (fast-forward only, merge or rebase), **Push** (and **force push with
-lease**) with ahead/behind counts. Fetch, pull, push and other network commands show a **Cancel** button and stop
-by themselves after 5 minutes; git never prompts for a password. A merge, rebase, cherry-pick or revert that stops
+lease**) with ahead/behind counts. When the repository has a `pre-push` hook, the Push menu also has **Run pre-push
+hooks** (see the hooks panel below). Fetch, pull, push and other network commands show a **Cancel** button and stop
+by themselves after 5 minutes (30 minutes for a push that runs a `pre-push` hook); git never prompts for a password. A merge, rebase, cherry-pick or revert that stops
 on conflicts shows a banner with **Continue**, **Skip** and **Abort**: resolve the files in Conflicts, save, and
 press Continue, without a terminal.
 
@@ -98,6 +100,24 @@ time:
 Filter by **All · Git · Actions · Problems**, copy the lines shown, clear the log, hide it, and drag its top edge to
 resize it. It keeps the newest 500 lines per window.
 
+**Hooks panel:** when a push or commit runs one of the repository's hooks (`pre-push`; `pre-commit`,
+`prepare-commit-msg`, `commit-msg`, `post-commit`), a panel opens above the log with everything the hooks print,
+live: their output and errors, a status (running, passed or failed, with the time), **Copy**, **Clear**, and a menu of
+the last 20 runs. Show or hide it from the command palette. Nothing opens when the repository has no such hook.
+
+* **Guardrails that open Terminal** run inside LF-Git instead. A hook that launches a check with
+  `open -a Terminal check.command` (also iTerm, Warp, Ghostty, or `open check.command`) or with
+  `osascript -e 'tell application "Terminal" to do script "…"'` gets the check run in place: its output shows in the
+  panel between `── Terminal action: … ──` and `── finished (exit N) ──`, and no Terminal window opens. Any other use
+  of `open` or `osascript` (a web page, a notification) works as usual. Settings › General › **Hooks** turns this off.
+  Not caught: a hook that calls `/usr/bin/open` by its full path.
+* **Run pre-push hooks** (Push menu): off pushes with `--no-verify`, skipping the `pre-push` hook. The choice is kept
+  per repository, a shield on the Push button shows it is off, the log notes each such push, and **force push**
+  warns that guardrails will be skipped.
+* **Skip hooks** (commit box): commits with `--no-verify`, also kept per repository. `prepare-commit-msg` and
+  `post-commit` still run, as git always runs them, and still show in the panel.
+* Hooks get no keyboard input: a hook that waits for an answer fails instead of hanging. Colour codes are removed.
+
 **Custom commands:** put your own shell commands in `~/.config/lfgit/config.json`; they appear in the command
 palette and run in the repository (`$LFGIT_REPO`, `$LFGIT_BRANCH` are set):
 
@@ -105,7 +125,7 @@ palette and run in the repository (`$LFGIT_REPO`, `$LFGIT_BRANCH` are set):
 { "customCommands": [ { "name": "Prune merged branches", "command": "git branch --merged | grep -v '\\*' | xargs git branch -d" } ] }
 ```
 
-**Settings (⌘,)** has a sidebar of six tabs: **General** (reopen the last repository), **Account** (commit author and git server accounts), **Network** (SSL verification), **Environment** (terminal environment), **Theme** (dark mode and accent color) and **Layout** (the arrangements above). The table lists the settings with their tab:
+**Settings (⌘,)** has a sidebar of six tabs: **General** (reopen the last repository; run hooks' Terminal actions inside LF-Git), **Account** (commit author and git server accounts), **Network** (SSL verification), **Environment** (terminal environment), **Theme** (dark mode and accent color) and **Layout** (the arrangements above). The table lists the settings with their tab:
 
 | Setting (tab) | What it does |
 |---|---|
@@ -113,6 +133,7 @@ palette and run in the repository (`$LFGIT_REPO`, `$LFGIT_BRANCH` are set):
 | **Verify SSL certificates** (Network) | `http.sslVerify`. On by default; switching it off shows a warning and applies to every https remote, so use it only for a server you trust |
 | **Git server accounts (token, password or LDAP)** (Account) | For a server that signs in with a **personal access token** (GitHub, GitLab, Bitbucket; enter the token as the password) or a company (LDAP) account, for example an internal GitLab behind a VPN: enter the server, your username and the password or token. The password is handed to git's own credential helper (the macOS keychain; `osxkeychain` is set up if you have no helper), never stored by the app, so fetch, pull and push work without a prompt. Remove an account to forget the password. A server with a private certificate authority may also need *Verify SSL certificates* off |
 | **Terminal environment** (Environment) | On by default. An app started from the Dock does not get what your shell exports, so a token login that works in a terminal can fail in the app (`gh auth` or `git-credential-manager` helpers not found, `GITHUB_TOKEN` or the SSH agent missing). The app asks your login shell once at launch (with an 8 s limit) and gives git your `PATH`, `SSH_AUTH_SOCK`, `GIT_ASKPASS`/`GIT_SSH_COMMAND`, `GH_TOKEN`/`GITHUB_TOKEN`/`GITLAB_TOKEN` and similar token variables, proxy variables and `GCM_*`. Nothing else is taken (never `GIT_DIR` and the like), and the values are never shown or logged. The section shows which `git` is used and which names were imported; **Reload** re-reads the shell |
+| **Run their Terminal actions inside LF-Git** (General › Hooks) | On by default. A guardrail hook that launches a check in Terminal gets it run inside the push or commit, with the output in the hooks panel (see above). Off: such hooks open Terminal as they would from a shell |
 | **Dark mode** / **Follow system appearance** (Theme) | Dark or light for the whole app, or follow macOS |
 | **Accent color** (Theme) | Green (default), Blue, Purple, Teal or Orange for buttons, the selected section/row and links; applies at once (the repository window is redrawn, so folders you had opened are closed again) |
 
