@@ -204,7 +204,14 @@ final class ChangesModel {
         let hash: String
         do {
             let skipHooks = noVerify
-            hash = try await repository.writeQueue.run { try client.commit(message: message, amend: amend, noVerify: skipHooks) }
+            var committed = ""
+            try await repository.withHookRun("Commit", hookNames: ["pre-commit", "prepare-commit-msg", "commit-msg", "post-commit"],
+                                             enabled: !skipHooks) { sink in
+                committed = try await repository.writeQueue.run {
+                    try client.commit(message: message, amend: amend, noVerify: skipHooks, onOutput: sink)
+                }
+            }
+            hash = committed
         } catch {
             await repository.refresh()
             throw error

@@ -162,6 +162,15 @@ final class RepositoryModel {
     private(set) var bisectCandidate: String?
     var confirmation: PendingConfirmation?
     var showsLogPanel = false
+    /// What the hooks of the last pushes and commits printed.
+    let hooks = HookRunStore()
+    var showsHooksPanel = false
+    /// Off: pushes go out with `--no-verify`. Remembered per repository.
+    var runsPushHooks = true {
+        didSet { HookPreferences().setRunsPushHooks(runsPushHooks, in: root) }
+    }
+    /// The repository has a `pre-push` hook, so the Push menu offers the switch. Set on every refresh.
+    private(set) var hasPrePushHook = false
     var showsPalette = false
     var showsHelp = false
     var section: RepositorySection = .changes
@@ -191,6 +200,7 @@ final class RepositoryModel {
 
     private init(root: URL) {
         self.root = root
+        runsPushHooks = HookPreferences().runsPushHooks(in: root)
         client = GitClient(directory: root, log: commandLog)
         changes = ChangesModel()
         history = HistoryModel()
@@ -282,6 +292,7 @@ final class RepositoryModel {
             isBisecting = snapshot.isBisecting
             bisectCandidate = snapshot.bisectCandidate
             lastFetchDate = snapshot.lastFetchDate
+            hasPrePushHook = client.hasHook(named: "pre-push")
             lastError = nil
             if !hasChosenSection {
                 hasChosenSection = true
@@ -379,12 +390,6 @@ final class RepositoryModel {
 
     func pull(_ strategy: PullStrategy = .fastForwardOnly) async throws {
         try await perform("Pulling…", cancellable: true) { client, token in try client.pull(strategy, cancellation: token) }
-    }
-
-    func push(force: Bool = false) async throws {
-        try await perform("Pushing…", cancellable: true, serialized: false) { client, token in
-            try client.push(force: force, cancellation: token)
-        }
     }
 
     func continueOperation() async throws {

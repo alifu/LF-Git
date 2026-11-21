@@ -137,7 +137,8 @@ public struct GitClient: Sendable {
 
     /// Commits the staged changes (or amends the last commit) and returns the new short hash.
     @discardableResult
-    public func commit(message: String, amend: Bool = false, noVerify: Bool = false) throws -> String {
+    public func commit(message: String, amend: Bool = false, noVerify: Bool = false,
+                       onOutput: (@Sendable (String) -> Void)? = nil) throws -> String {
         guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw GitClientError.emptyMessage
         }
@@ -147,7 +148,7 @@ public struct GitClient: Sendable {
         var arguments = ["commit", "-q", "--cleanup=whitespace", "-F", "-"]
         if amend { arguments.append("--amend") }
         if noVerify { arguments.append("--no-verify") }
-        try git.run(arguments, stdin: Data(message.utf8))
+        try git.run(arguments, stdin: Data(message.utf8), onStandardError: onOutput, combineOutput: onOutput != nil)
         return try git.run(["rev-parse", "--short", "HEAD"]).text
     }
 
@@ -282,17 +283,23 @@ public struct GitClient: Sendable {
 
     /// Pushes the current branch; a branch without an upstream is published with `-u`.
     /// `force` uses `--force-with-lease`: it overwrites the remote branch only if nobody else pushed to it meanwhile.
-    public func push(force: Bool = false, timeout: TimeInterval? = defaultRemoteTimeout,
-                     cancellation: GitCancellation? = nil) throws {
+    /// `runHooks: false` adds `--no-verify`, which skips the `pre-push` hook. `onOutput` receives what hooks
+    /// print while git runs. A `pre-push` hook can take as long as it likes, so no timeout applies then
+    /// (Cancel still stops it).
+    public func push(force: Bool = false, runHooks: Bool = true, timeout: TimeInterval? = defaultRemoteTimeout,
+                     cancellation: GitCancellation? = nil, onOutput: (@Sendable (String) -> Void)? = nil) throws {
         let remotes = try requireRemote()
         let status = try status()
         guard let branch = status.branch else { throw GitClientError.notOnBranch }
-        let flags = force ? ["--force-with-lease"] : []
+        let flags = (force ? ["--force-with-lease"] : []) + (runHooks ? [] : ["--no-verify"])
+        let effectiveTimeout = runHooks && hasHook(named: "pre-push") ? nil : timeout
         if status.upstream != nil {
-            try git.run(["push", "-q"] + flags, timeout: timeout, cancellation: cancellation)
+            try git.run(["push", "-q"] + flags, timeout: effectiveTimeout, cancellation: cancellation, onStandardError: onOutput,
+                        combineOutput: onOutput != nil)
         } else {
             try git.run(["push", "-q", "-u"] + flags + [remotes.contains("origin") ? "origin" : remotes[0], branch],
-                        timeout: timeout, cancellation: cancellation)
+                        timeout: effectiveTimeout, cancellation: cancellation, onStandardError: onOutput,
+                        combineOutput: onOutput != nil)
         }
     }
 }

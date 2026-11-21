@@ -239,7 +239,8 @@ struct RemoteButtons: View {
     }
 
     private var pushMenu: some View {
-        Menu {
+        @Bindable var repository = repository
+        return Menu {
             Button("Push") { run { try await repository.push() } }
             Button("Force Push (with lease)…") {
                 repository.confirm(PendingConfirmation(
@@ -247,8 +248,21 @@ struct RemoteButtons: View {
                     message: "The remote branch is overwritten, unless somebody else pushed to it since your last fetch.",
                     confirmTitle: "Force Push") { run { try await repository.push(force: true) } })
             }
+            if repository.hasPrePushHook {
+                Divider()
+                Toggle("Run pre-push hooks", isOn: $repository.runsPushHooks)
+                    .accessibilityIdentifier("push-run-hooks")
+                Button("Show Hook Output") { repository.showsHooksPanel = true }
+                    .disabled(repository.hooks.latest == nil)
+            }
         } label: {
-            countLabel("arrow.up", repository.status.ahead, name: "Push")
+            HStack(spacing: 4) {
+                countLabel("arrow.up", repository.status.ahead, name: "Push")
+                if repository.hasPrePushHook, !repository.runsPushHooks {
+                    Image(systemName: "shield.slash").foregroundStyle(.orange).help("pre-push hooks are off for this repository")
+                        .accessibilityLabel("Hooks off")
+                }
+            }
         } primaryAction: {
             run { try await repository.push() }
         }

@@ -17,11 +17,17 @@ struct RepositoryView: View {
             SectionRail(repository: repository)
             content
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if repository.showsLogPanel {
-                        LogPanelView(repository: repository)
-                            .lfCard()
-                            .padding([.leading, .trailing, .bottom], Chrome.gutter)
+                    VStack(spacing: Chrome.gutter) {
+                        if repository.showsHooksPanel {
+                            HooksPanelView(repository: repository)
+                                .lfCard()
+                        }
+                        if repository.showsLogPanel {
+                            LogPanelView(repository: repository)
+                                .lfCard()
+                        }
                     }
+                    .padding([.leading, .trailing, .bottom], Chrome.gutter)
                 }
         }
         .background(.theme(.surfaceSunken))
