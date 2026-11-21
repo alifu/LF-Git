@@ -1,0 +1,7 @@
+#!/bin/sh
+# A guardrail hook the way some team repos ship one: it opens a Terminal window for its checks and prints a summary.
+echo "guardrails: starting"
+open -a Terminal "$(dirname "$0")/guardrails.command"
+echo "guardrail: lint ok"
+echo "guardrail: secret scan ok" >&2
+exit 0
