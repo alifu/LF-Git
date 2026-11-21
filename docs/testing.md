@@ -46,3 +46,10 @@ xcodebuild test -scheme LF-Git -destination 'platform=macOS' -only-testing:LF-Gi
 
 `Scripts/release/check-version.sh` keeps the version in `MARKETING_VERSION`, `lfcore.h` and `Formula/lfgit.rb`
 aligned; `RELEASING.md` has the tag → build → cask flow.
+
+## Building lfgit in Xcode, then the app
+
+The `lfgit` and `lf-bench` schemes compile LFKit as plain objects and leave `LFKit.swiftmodule` in the shared
+`Products/Debug` folder. The app uses `LFKit.framework`, and that older module would shadow it, so new LFKit API
+looked missing ("extra argument", "cannot find … in scope"). The app target's first build phase, *Remove stale LFKit
+module*, deletes it before compiling; the build log says when it did.
