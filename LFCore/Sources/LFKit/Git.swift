@@ -61,6 +61,11 @@ public struct Git: Sendable {
     /// How long a stopped command gets to clean up before it is killed.
     private static let gracePeriod: TimeInterval = 2
 
+    /// The environment every git command starts from: this process's, with the login shell's settings on top.
+    public static var inheritedEnvironment: [String: String] {
+        ProcessInfo.processInfo.environment.merging(GitEnvironment.shared.current) { _, new in new }
+    }
+
     public init(directory: URL, log: GitCommandLog? = nil) {
         self.directory = directory
         self.log = log
@@ -161,8 +166,7 @@ public struct Git: Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git"] + arguments
         process.currentDirectoryURL = directory
-        process.environment = ProcessInfo.processInfo.environment
-            .merging(GitEnvironment.shared.current) { _, new in new }
+        process.environment = Self.inheritedEnvironment
             .merging(environment) { _, new in new }
             .merging([
                 "GIT_TERMINAL_PROMPT": "0",

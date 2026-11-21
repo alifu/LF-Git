@@ -139,7 +139,8 @@ public struct GitClient: Sendable {
 
     /// Commits the staged changes (or amends the last commit) and returns the new short hash.
     @discardableResult
-    public func commit(message: String, amend: Bool = false, noVerify: Bool = false,
+    /// `hookShims`: a folder from `HookShims.install`, put first on the hooks' `PATH`.
+    public func commit(message: String, amend: Bool = false, noVerify: Bool = false, hookShims: URL? = nil,
                        onOutput: (@Sendable (String) -> Void)? = nil) throws -> String {
         guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw GitClientError.emptyMessage
@@ -150,8 +151,15 @@ public struct GitClient: Sendable {
         var arguments = ["commit", "-q", "--cleanup=whitespace", "-F", "-"]
         if amend { arguments.append("--amend") }
         if noVerify { arguments.append("--no-verify") }
-        try git.run(arguments, stdin: Data(message.utf8), onStandardError: onOutput, combineOutput: onOutput != nil)
+        try git.run(arguments, stdin: Data(message.utf8), environment: Self.hookEnvironment(hookShims),
+                    onStandardError: onOutput, combineOutput: onOutput != nil)
         return try git.run(["rev-parse", "--short", "HEAD"]).text
+    }
+
+    /// Puts the hook shims first on `PATH`; nothing when there are none.
+    static func hookEnvironment(_ shims: URL?) -> [String: String] {
+        guard let shims else { return [:] }
+        return ["PATH": HookShims.path(prepending: shims, to: Git.inheritedEnvironment["PATH"])]
     }
 
     /// Adds the staged changes to the last commit and keeps its message.
@@ -288,19 +296,24 @@ public struct GitClient: Sendable {
     /// `runHooks: false` adds `--no-verify`, which skips the `pre-push` hook. `onOutput` receives what hooks
     /// print while git runs. A `pre-push` hook (a test suite, a scan) gets `hookTimeout` instead of `timeout`,
     /// so a slow guardrail finishes but a hung one is still stopped. Cancel works either way.
-    public func push(force: Bool = false, runHooks: Bool = true, timeout: TimeInterval? = defaultRemoteTimeout,
-                     cancellation: GitCancellation? = nil, onOutput: (@Sendable (String) -> Void)? = nil) throws {
+    /// `hookShims`: a folder from `HookShims.install`, put first on the hooks' `PATH`.
+    public func push(force: Bool = false, runHooks: Bool = true, hookShims: URL? = nil,
+                     timeout: TimeInterval? = defaultRemoteTimeout, cancellation: GitCancellation? = nil,
+                     onOutput: (@Sendable (String) -> Void)? = nil) throws {
         let remotes = try requireRemote()
         let status = try status()
         guard let branch = status.branch else { throw GitClientError.notOnBranch }
         let flags = (force ? ["--force-with-lease"] : []) + (runHooks ? [] : ["--no-verify"])
         let effectiveTimeout = runHooks && hasHook(named: "pre-push") ? timeout.map { max($0, Self.hookTimeout) } : timeout
+        let environment = Self.hookEnvironment(runHooks ? hookShims : nil)
         if status.upstream != nil {
-            try git.run(["push", "-q"] + flags, timeout: effectiveTimeout, cancellation: cancellation, onStandardError: onOutput,
+            try git.run(["push", "-q"] + flags, environment: environment, timeout: effectiveTimeout,
+                        cancellation: cancellation, onStandardError: onOutput,
                         combineOutput: onOutput != nil)
         } else {
             try git.run(["push", "-q", "-u"] + flags + [remotes.contains("origin") ? "origin" : remotes[0], branch],
-                        timeout: effectiveTimeout, cancellation: cancellation, onStandardError: onOutput,
+                        environment: environment, timeout: effectiveTimeout, cancellation: cancellation,
+                        onStandardError: onOutput,
                         combineOutput: onOutput != nil)
         }
     }
