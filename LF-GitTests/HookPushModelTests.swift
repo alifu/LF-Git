@@ -91,3 +91,37 @@ struct HookPushModelTests {
         #expect(try RepositoryModel.open(at: fixture.directory).changes.noVerify)
     }
 }
+
+@MainActor
+@Suite("Hook Terminal actions")
+struct HookTerminalActionModelTests {
+    @Test("a hook's open -a Terminal action runs inside the push and its output is in the run")
+    func terminalActionInline() async throws {
+        let fixture = try GitFixture()
+        try fixture.commit("a.txt", "1\n", message: "one")
+        _ = try fixture.addOrigin()
+        try fixture.commit("a.txt", "2\n", message: "two")
+        let git = fixture.directory.appendingPathComponent(".git")
+        let recorder = git.appendingPathComponent("recorder")
+        let script = git.appendingPathComponent("guardrails.command")
+        try write(recorder, "#!/bin/sh\necho passed-through >> '\(git.path)/passed-through'\n")
+        try write(script, "#!/bin/sh\necho guardrail-in-terminal\n")
+        try write(git.appendingPathComponent("hooks/pre-push"),
+                  "#!/bin/sh\nexport LFGIT_REAL_OPEN='\(recorder.path)'\nopen -a Terminal '\(script.path)'\n")
+        let model = try RepositoryModel.open(at: fixture.directory)
+        await model.refresh()
+
+        try await model.push()
+
+        let text = try #require(model.hooks.latest?.text)
+        #expect(text.contains("Terminal action: \(script.path)"))
+        #expect(text.contains("guardrail-in-terminal"))
+        #expect(text.contains("finished (exit 0)"))
+        #expect(!FileManager.default.fileExists(atPath: git.appendingPathComponent("passed-through").path))
+    }
+
+    private func write(_ url: URL, _ text: String) throws {
+        try text.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+    }
+}

@@ -9,6 +9,13 @@ struct HookPreferences {
         self.defaults = defaults
     }
 
+    /// App-wide: a hook's "open Terminal" actions run inside LF-Git (`HookShims`). On by default.
+    static let terminalActionsKey = "runsHookTerminalActionsInline"
+
+    var runsTerminalActionsInline: Bool {
+        defaults.object(forKey: Self.terminalActionsKey) as? Bool ?? true
+    }
+
     private func key(_ root: URL) -> String { "pushHooksDisabled:\(root.standardizedFileURL.path)" }
     private func commitKey(_ root: URL) -> String { "commitHooksSkipped:\(root.standardizedFileURL.path)" }
 

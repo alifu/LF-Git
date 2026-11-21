@@ -3,12 +3,18 @@ import SwiftUI
 /// Behaviour of the app itself.
 struct GeneralSettingsTab: View {
     @AppStorage(AppModel.reopenLastKey) private var reopensLastRepository = true
+    @AppStorage(HookPreferences.terminalActionsKey) private var runsHookTerminalActionsInline = true
 
     var body: some View {
         SettingsPage {
             SettingsCard("Startup", description: "What LF-Git does when it opens.") {
                 Toggle("Reopen the last repository when the app starts", isOn: $reopensLastRepository)
                     .accessibilityIdentifier("settings-reopen-last")
+            }
+            SettingsCard("Hooks", description: "Guardrail hooks that open Terminal to run a check.") {
+                Toggle("Run their Terminal actions inside LF-Git", isOn: $runsHookTerminalActionsInline)
+                    .help("The action runs in the hook and its output shows in the Hooks panel; no Terminal window opens.")
+                    .accessibilityIdentifier("settings-hook-terminal-actions")
             }
         }
     }

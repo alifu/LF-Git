@@ -35,10 +35,29 @@ extension RepositoryModel {
             record(.info, "Pushing with hooks disabled: pre-push is skipped")
         }
         try await withHookRun("Push", hookNames: ["pre-push"], enabled: runHooks) { sink in
+            let shims = runHooks ? await self.hookShims() : nil
             try await self.perform("Pushing…", cancellable: true, serialized: false) { client, token in
-                try client.push(force: force, runHooks: runHooks, cancellation: token, onOutput: sink)
+                try client.push(force: force, runHooks: runHooks, hookShims: shims, cancellation: token, onOutput: sink)
             }
         }
+    }
+
+    /// The folder of `open` / `osascript` stand-ins for hooks, when the setting is on. Written off the main thread;
+    /// a failure is logged and the command runs without them (hooks then open Terminal as before).
+    func hookShims() async -> URL? {
+        guard HookPreferences().runsTerminalActionsInline else { return nil }
+        do {
+            return try await Self.installHookShims()
+        } catch {
+            record(.error, "Could not prepare hook Terminal actions, they will open Terminal: \(error.localizedDescription)",
+                   succeeded: false)
+            return nil
+        }
+    }
+
+    @concurrent
+    nonisolated private static func installHookShims() async throws -> URL {
+        try HookShims.install()
     }
 
     @concurrent

@@ -214,8 +214,9 @@ final class ChangesModel {
             // `--no-verify` skips pre-commit and commit-msg only: prepare-commit-msg and post-commit still run.
             let hookNames = skipHooks ? Self.unskippableCommitHooks : Self.unskippableCommitHooks + Self.skippableCommitHooks
             try await repository.withHookRun("Commit", hookNames: hookNames) { sink in
+                let shims = await repository.hookShims()
                 committed = try await repository.writeQueue.run {
-                    try client.commit(message: message, amend: amend, noVerify: skipHooks, onOutput: sink)
+                    try client.commit(message: message, amend: amend, noVerify: skipHooks, hookShims: shims, onOutput: sink)
                 }
             }
             hash = committed
