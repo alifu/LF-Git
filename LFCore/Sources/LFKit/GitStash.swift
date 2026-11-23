@@ -57,12 +57,22 @@ extension GitClient {
     }
 
     public func stashApply(_ stash: GitStash) throws {
-        try git.run(["stash", "apply", "--index", try currentRef(of: stash)], literalPathspecs: false)
+        try restoreStash("apply", try currentRef(of: stash))
     }
 
     /// Applies and drops the stash. If applying conflicts, git keeps the stash and this throws.
     public func stashPop(_ stash: GitStash) throws {
-        try git.run(["stash", "pop", "--index", try currentRef(of: stash)], literalPathspecs: false)
+        try restoreStash("pop", try currentRef(of: stash))
+    }
+
+    /// Restores the staged state too when it still fits; on another branch it often doesn't,
+    /// and git refuses with "conflicts in index", so the changes then come back unstaged.
+    private func restoreStash(_ command: String, _ ref: String) throws {
+        do {
+            try git.run(["stash", command, "--index", ref], literalPathspecs: false)
+        } catch GitError.failed(_, _, let stderr) where stderr.contains("--index") {
+            try git.run(["stash", command, ref], literalPathspecs: false)
+        }
     }
 
     public func stashDrop(_ stash: GitStash) throws {
