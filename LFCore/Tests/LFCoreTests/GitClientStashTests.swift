@@ -80,6 +80,29 @@ struct GitClientStashTests {
         #expect(try client.stashes().isEmpty)
     }
 
+    @Test("a staged stash applies and pops on a branch where its index no longer fits")
+    func applyOnAnotherBranch() throws {
+        let fixture = try GitFixture()
+        let client = GitClient(directory: fixture.directory)
+        try fixture.commit("f.txt", "1\n2\n3\n4\n5\n")
+        try client.createBranch("other")
+        try fixture.commit("f.txt", "1\n2\nX\n4\n5\n")
+        try client.switchBranch("main")
+        fixture.sandbox.write("f.txt", "1\n2\n3\n4\n5\n6\n")
+        try client.stage(["f.txt"])
+        try client.stashPush(message: "staged")
+        try client.switchBranch("other")
+        let stash = try #require(try client.stashes().first)
+
+        try client.stashApply(stash)
+        #expect(fixture.read("f.txt") == "1\n2\nX\n4\n5\n6\n")
+
+        try client.discard(try client.status().unstaged)
+        try client.stashPop(stash)
+        #expect(fixture.read("f.txt") == "1\n2\nX\n4\n5\n6\n")
+        #expect(try client.stashes().isEmpty)
+    }
+
     @Test("dropping removes only the chosen stash")
     func drop() throws {
         let (fixture, client) = try fixtureWithEdits()
