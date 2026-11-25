@@ -127,6 +127,28 @@ final class LazygitUITests: GitUITestCase {
         XCTAssertFalse(item(app, "branch-alpha").exists)
     }
 
+    func testRemoteBranchesStartFoldedWithTheirOwnSearch() throws {
+        try commitHistory("base")
+        try git("branch", "alpha")
+        try git("update-ref", "refs/remotes/origin/shared", "HEAD")
+        let app = launch(appearance: "light")
+        showSection("Branches", in: app)
+        XCTAssertTrue(item(app, "branch-alpha").waitForExistence(timeout: 10))
+
+        let toggle = item(app, "branches-remote-toggle")
+        XCTAssertTrue(toggle.exists, "the remote panel has its own header")
+        XCTAssertFalse(item(app, "branch-origin/shared").exists, "remote branches start folded")
+
+        toggle.click()
+        XCTAssertTrue(item(app, "branch-origin/shared").waitForExistence(timeout: 5), "the header opens the remote list")
+
+        let remoteSearch = app.textFields["branch-remote-search"]
+        remoteSearch.click()
+        remoteSearch.typeText("alpha")
+        XCTAssertFalse(item(app, "branch-origin/shared").exists, "the remote search filters only remote branches")
+        XCTAssertTrue(item(app, "branch-alpha").exists, "the local list is untouched by the remote search")
+    }
+
     func testSpaceStagesAndUnstagesTheSelectedFile() throws {
         try commitHistory("base")
         try write("base.txt", "edited\n")

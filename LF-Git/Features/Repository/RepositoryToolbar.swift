@@ -1,22 +1,27 @@
 import LFKit
 import SwiftUI
 
-/// The branch menu: a popover with a search box to switch to a branch, plus create and delete.
+/// The branch menu: a popover to switch to a branch, plus create and delete. Local and remote branches each have
+/// their own list and search box; the remote list starts folded so it is opened on purpose.
 struct BranchMenu: View {
     let repository: RepositoryModel
     let app: AppModel
     @State private var isOpen = false
-    @State private var query = ""
+    @State private var localQuery = ""
+    @State private var remoteQuery = ""
+    /// Remote branches start folded away so a stray click cannot check one out; reset on every open.
+    @State private var showsRemotes = false
     @State private var deleting: GitBranch?
-    @FocusState private var searchFocused: Bool
+    @FocusState private var localSearchFocused: Bool
+    @FocusState private var remoteSearchFocused: Bool
 
-    private var searchText: String { query.trimmingCharacters(in: .whitespaces) }
-    private var locals: [GitBranch] { matching(repository.branches.filter { !$0.isRemote }) }
-    private var remotes: [GitBranch] { matching(repository.branches.filter(\.isRemote)) }
+    private static let listHeight: CGFloat = 260
+    private static let splitListHeight: CGFloat = 160
 
-    private func matching(_ list: [GitBranch]) -> [GitBranch] {
-        searchText.isEmpty ? list : list.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
-    }
+    private var allLocals: [GitBranch] { repository.branches.filter { !$0.isRemote } }
+    private var allRemotes: [GitBranch] { repository.branches.filter(\.isRemote) }
+    private var locals: [GitBranch] { BranchMenuFilter.matching(allLocals, query: localQuery, name: \.name) }
+    private var remotes: [GitBranch] { BranchMenuFilter.matching(allRemotes, query: remoteQuery, name: \.name) }
 
     var body: some View {
         Button { isOpen.toggle() } label: {
@@ -36,7 +41,10 @@ struct BranchMenu: View {
         .disabled(repository.isBusy || repository.operation != nil)
         .popover(isPresented: $isOpen, arrowEdge: .bottom) { popover }
         .onChange(of: isOpen) { _, open in
-            if open { query = "" }
+            guard open else { return }
+            localQuery = ""
+            remoteQuery = ""
+            showsRemotes = false
         }
         .confirmationDialog(
             "Delete \(deleting?.name ?? "branch")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -53,29 +61,11 @@ struct BranchMenu: View {
 
     private var popover: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.theme(.textSubtle))
-                TextField("Search branches", text: $query)
-                    .textFieldStyle(.plain)
-                    .focused($searchFocused)
-                    .onSubmit { if let first = locals.first(where: { !$0.isCurrent }) ?? remotes.first { choose(first) } }
-                    .accessibilityIdentifier("branch-menu-search")
+            localSection
+            if !allRemotes.isEmpty {
+                Divider()
+                remoteSection
             }
-            .padding(10)
-            Divider()
-            List {
-                if locals.isEmpty && remotes.isEmpty {
-                    Text("No branches match").foregroundStyle(.theme(.textSubtle))
-                }
-                if !locals.isEmpty {
-                    Section("Branches") { ForEach(locals) { branchRow($0) } }
-                }
-                if !remotes.isEmpty {
-                    Section("Remote Branches") { ForEach(remotes) { branchRow($0) } }
-                }
-            }
-            .listStyle(.plain)
-            .frame(height: 260)
             Divider()
             HStack {
                 Button("New Branch…") {
@@ -99,7 +89,97 @@ struct BranchMenu: View {
             .padding(10)
         }
         .frame(width: 300)
-        .onAppear { searchFocused = true }
+        .onAppear { localSearchFocused = true }
+    }
+
+    // MARK: - Local and remote sections
+
+    private var localSection: some View {
+        VStack(spacing: 0) {
+            sectionTitle("Local Branches", count: locals.count)
+            searchField("Search local branches", text: $localQuery, focus: $localSearchFocused, id: "branch-menu-search") {
+                switchToFirst(allLocals, query: localQuery)
+            }
+            Divider()
+            branchList(locals, emptyText: "No local branches match", height: showsRemotes ? Self.splitListHeight : Self.listHeight)
+                .accessibilityIdentifier("branch-menu-local-list")
+        }
+    }
+
+    /// Folded by default: a header button the user opens on purpose, on a raised background so it reads as apart.
+    private var remoteSection: some View {
+        VStack(spacing: 0) {
+            Button { toggleRemotes() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .rotationEffect(.degrees(showsRemotes ? 90 : 0))
+                    sectionTitleText("Remote Branches", count: remotes.count)
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(showsRemotes ? "Hide remote branches" : "Show remote branches")
+            .accessibilityIdentifier("branch-menu-remote-toggle")
+            if showsRemotes {
+                searchField("Search remote branches", text: $remoteQuery, focus: $remoteSearchFocused, id: "branch-menu-remote-search") {
+                    switchToFirst(allRemotes, query: remoteQuery)
+                }
+                Divider()
+                branchList(remotes, emptyText: "No remote branches match", height: Self.splitListHeight)
+                    .accessibilityIdentifier("branch-menu-remote-list")
+            }
+        }
+        .background(.theme(.surfaceRaised))
+    }
+
+    private func sectionTitle(_ title: String, count: Int) -> some View {
+        sectionTitleText(title, count: count)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
+    }
+
+    private func sectionTitleText(_ title: String, count: Int) -> some View {
+        Text("\(title) · \(count)").font(.caption.weight(.semibold)).foregroundStyle(.theme(.textSubtle))
+    }
+
+    private func searchField(_ prompt: String, text: Binding<String>, focus: FocusState<Bool>.Binding, id: String,
+                             onSubmit: @escaping () -> Void) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.theme(.textSubtle))
+            TextField(prompt, text: text)
+                .textFieldStyle(.plain)
+                .focused(focus)
+                .onSubmit(onSubmit)
+                .accessibilityIdentifier(id)
+        }
+        .padding(10)
+    }
+
+    private func branchList(_ branches: [GitBranch], emptyText: String, height: CGFloat) -> some View {
+        List {
+            if branches.isEmpty {
+                Text(emptyText).foregroundStyle(.theme(.textSubtle))
+            }
+            ForEach(branches) { branchRow($0) }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .frame(height: height)
+    }
+
+    private func toggleRemotes() {
+        showsRemotes.toggle()
+        if showsRemotes { remoteSearchFocused = true } else { localSearchFocused = true }
+    }
+
+    private func switchToFirst(_ branches: [GitBranch], query: String) {
+        if let first = BranchMenuFilter.firstSwitchable(branches, query: query, name: \.name, isCurrent: \.isCurrent) { choose(first) }
     }
 
     private func branchRow(_ branch: GitBranch) -> some View {
