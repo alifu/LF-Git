@@ -4,14 +4,19 @@
 
 `Branches/BranchesViews.swift` — `BranchesSidebar` (left) and `BranchesDetail` (commit list + commit detail).
 
-* **Local / Remote sections** are collapsible (`Section(isExpanded:)`). Remote names drop the `origin/` prefix:
+* **Local and Remote panels** are separate lists that share `repository.branchSelection` (`branches-list`,
+  `branches-remote-list`). The Remote panel sits on a raised background below the local one and is **folded by
+  default** (`showsRemotes`, toggled by `branches-remote-toggle`) so a stray click lands on a local branch; picking
+  **Remote** in the three-column scope picker shows it open. Remote names drop the `origin/` prefix:
   `remoteName(of:)` finds the longest known remote that prefixes the name, `nameOnRemote` is the rest. With more
   than one remote each gets a `DisclosureGroup`; with one, its branches stand alone.
-* **Folders**: `feature/login` becomes a folder via `PathNode` (`BranchTreeRows`). Folder open/closed state shares
-  the `collapsed` set with the sections; keys are prefixed (`local:`, `remote:<name>:`) so two trees never clash.
-* **Search**: `query` filters both lists by case-insensitive substring and switches to a flat result list
-  (folders hidden); `ContentUnavailableView.search` shows when nothing matches.
-* **Expand All / Collapse All**: `collapsed = []` / `collapsed = Set(allKeys)`.
+* **Folders**: `feature/login` becomes a folder via `PathNode` (`BranchTreeRows`). Folder and remote open/closed
+  state lives in the `collapsed` set; keys are prefixed (`local:`, `remote:<name>:`) so two trees never clash.
+* **Search**: each panel has its own box (`branch-search`, `branch-remote-search`) that filters only its own list
+  (`BranchMenuFilter`, case-insensitive substring) and switches it to a flat result list (folders hidden);
+  `ContentUnavailableView.search` shows in that panel when nothing matches.
+* **Expand All / Collapse All**: `collapsed = []` / `collapsed = Set(allKeys)` — folders and remotes only; the Remote
+  panel keeps its own toggle.
 * **Double-click = check out**: `.contextMenu(forSelectionType:menu:primaryAction:)`; the primary action calls
   `checkOut(_:)` → `GitClient.switchBranch` (a remote branch gets a local tracking branch). The menu is
   `BranchContextMenu`.
@@ -49,9 +54,9 @@ Branches                                        History, Stash, Tags, Reflog
 └────────────────────┘ └───────────────────────────────────┘
 ```
 
-* **Branches** (`BranchesSidebar`): a pinned **current target** row above the search (`current-target`): the checked-out
+* **Branches** (`BranchesSidebar`): a pinned **current target** row above the panels (`current-target`): the checked-out
   branch (or *Detached HEAD* / *No branch yet*), *tracks …* or *no upstream*, and its ahead/behind badge. It is not
-  a selectable row. A segmented **All / Local / Remote** picker (`branch-scope`) filters the groups; Classic always
+  a selectable row. A segmented **All / Local / Remote** picker (`branch-scope`) shows both panels, only Local or only Remote; Classic always
   shows both.
 * **Branches detail** (`BranchesDetail`): one card (`JoinedCards`) with the commit list on the left and the preview on
   the right. The commit list (300–420 pt) is `CommitListView` with day headers. The preview is `HistoryDetailView`, with
@@ -77,9 +82,11 @@ Branches                                        History, Stash, Tags, Reflog
 
 ## Toolbar branch menu
 
-`Repository/RepositoryToolbar.swift` → `BranchMenu`: a button that opens a **popover** with a search field
-(focused on open), Local and Remote lists, **New Branch…** and a **Delete Branch** menu. Return switches to the first
-match. It is a popover because a SwiftUI `Menu` cannot hold a text field. XCUITest cannot see inside the popover, so
+`Repository/RepositoryToolbar.swift` → `BranchMenu`: a button that opens a **popover** with separate **Local** and
+**Remote** sections, each with its own search field and list (filtered by `BranchMenuFilter` in `ListsLogic.swift`),
+plus **New Branch…** and a **Delete Branch** menu. The local search is focused on open; Return switches to the first
+match in that section that is not checked out. The Remote section sits on a raised background and is **folded on every
+open** (`branch-menu-remote-toggle`), so a stray click cannot check out a remote branch. It is a popover because a SwiftUI `Menu` cannot hold a text field. XCUITest cannot see inside the popover, so
 `GitClientUITests.testSearchTheBranchMenuAndSwitch` drives it with the keyboard.
 
 ## Confirmations

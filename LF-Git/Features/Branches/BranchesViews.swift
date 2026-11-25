@@ -1,29 +1,37 @@
 import LFKit
 import SwiftUI
 
-/// Local and remote branches in collapsible groups, with a search box. Double-click checks a branch out;
-/// every other branch action is in the context menu.
+/// Local and remote branches in separate panels, each with its own search box. The remote panel starts folded so a
+/// stray click lands on a local branch. Double-click checks a branch out; every other action is in the context menu.
 struct BranchesSidebar: View {
     @Bindable var repository: RepositoryModel
     let app: AppModel
-    @State private var query = ""
+    @State private var localQuery = ""
+    @State private var remoteQuery = ""
     @AppStorage(LayoutPreferences.listsKey) private var listsLayout = ListsLayout.default.rawValue
     @State private var scope = BranchScope.all
-    /// Sections, remotes and folders the user closed; everything is open by default.
+    /// The remote panel is folded until the user opens it.
+    @State private var showsRemotes = false
+    /// Remotes and folders the user closed; they are open by default.
     @State private var collapsed: Set<String> = []
 
     private var isThreeColumn: Bool { ListsLayout(stored: listsLayout) == .threeColumn }
-    /// The scope only applies in the three-column layout; Classic always shows both groups.
+    /// The scope only applies in the three-column layout; Classic always shows both panels.
     private var activeScope: BranchScope { isThreeColumn ? scope : .all }
-    private var locals: [GitBranch] { activeScope.showsLocal ? repository.branches.filter { !$0.isRemote } : [] }
-    private var remotes: [GitBranch] { activeScope.showsRemote ? repository.branches.filter(\.isRemote) : [] }
+    private var allLocals: [GitBranch] { repository.branches.filter { !$0.isRemote } }
+    private var allRemotes: [GitBranch] { repository.branches.filter(\.isRemote) }
+    private var locals: [GitBranch] { BranchMenuFilter.matching(allLocals, query: localQuery, name: \.name) }
+    private var remotes: [GitBranch] { BranchMenuFilter.matching(allRemotes, query: remoteQuery, name: \.name) }
+    private var localSearchText: String { localQuery.trimmingCharacters(in: .whitespaces) }
+    private var remoteSearchText: String { remoteQuery.trimmingCharacters(in: .whitespaces) }
+    /// Picking Remote in the scope picker shows the remote list open; otherwise it is as the user left it.
+    private var isRemoteOpen: Bool { activeScope == .remote || showsRemotes }
+    private var showsRemotePanel: Bool { activeScope.showsRemote && (activeScope == .remote || !allRemotes.isEmpty) }
     private var currentTarget: CurrentTarget {
         let status = repository.status
         return CurrentTarget(branch: status.branch, upstream: status.upstream, ahead: status.ahead, behind: status.behind,
                              isDetached: status.isDetached)
     }
-    private var searchText: String { query.trimmingCharacters(in: .whitespaces) }
-    private var isSearching: Bool { !searchText.isEmpty }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,25 +40,8 @@ struct BranchesSidebar: View {
                 CurrentTargetRow(target: currentTarget)
                 scopePicker
             }
-            searchField
-            List(selection: $repository.branchSelection) {
-                localSection
-                remoteSection
-            }
-            .listStyle(.sidebar)
-            .accessibilityIdentifier("branches-list")
-            .contextMenu(forSelectionType: String.self) { ids in
-                if ids.count == 1, let branch = branch(withID: ids.first) {
-                    BranchContextMenu(repository: repository, app: app, branch: branch)
-                }
-            } primaryAction: { ids in
-                if ids.count == 1, let branch = branch(withID: ids.first) { checkOut(branch) }
-            }
-            .overlay {
-                if isSearching && matches(locals).isEmpty && matches(remotes).isEmpty {
-                    ContentUnavailableView.search(text: searchText)
-                }
-            }
+            if activeScope.showsLocal { localPanel }
+            if showsRemotePanel { remotePanel }
         }
         .onChange(of: repository.branchSelection, initial: true) { showHistory() }
         .onChange(of: repository.branches) { showHistory() }
@@ -68,10 +59,10 @@ struct BranchesSidebar: View {
             .help("Check out the previously checked-out branch")
             Spacer()
             Button { collapsed = [] } label: { Label("", systemImage: "chevron.down.2") }
-                .help("Open every group")
+                .help("Open every folder")
                 .accessibilityIdentifier("branches-expand-all")
             Button { collapsed = Set(allKeys) } label: { Label("", systemImage: "chevron.up.2") }
-                .help("Close every group")
+                .help("Close every folder")
                 .accessibilityIdentifier("branches-collapse-all")
         }
         .frame(maxWidth: .infinity)
@@ -88,14 +79,14 @@ struct BranchesSidebar: View {
         .accessibilityIdentifier("branch-scope")
     }
 
-    private var searchField: some View {
+    private func searchField(_ prompt: String, text: Binding<String>, id: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass").foregroundStyle(.theme(.textSubtle))
-            TextField("Search branches", text: $query)
+            TextField(prompt, text: text)
                 .textFieldStyle(.plain)
-                .accessibilityIdentifier("branch-search")
-            if !query.isEmpty {
-                Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
+                .accessibilityIdentifier(id)
+            if !text.wrappedValue.isEmpty {
+                Button { text.wrappedValue = "" } label: { Image(systemName: "xmark.circle.fill") }
                     .buttonStyle(.borderless)
                     .help("Clear the search")
             }
@@ -105,20 +96,31 @@ struct BranchesSidebar: View {
         .overlay(alignment: .bottom) { Divider() }
     }
 
+    private func panelTitle(_ title: String, count: Int) -> some View {
+        Text("\(title) · \(count)").font(.caption.weight(.semibold)).foregroundStyle(.theme(.textSubtle))
+    }
+
     // MARK: - Local
 
+    private var localPanel: some View {
+        VStack(spacing: 0) {
+            panelTitle("Local", count: locals.count)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+            searchField("Search local branches", text: $localQuery, id: "branch-search")
+            branchList(emptySearch: locals.isEmpty ? localSearchText : "") { localRows }
+                .accessibilityIdentifier("branches-list")
+        }
+    }
+
     @ViewBuilder
-    private var localSection: some View {
-        let shown = matches(locals)
-        Section(isExpanded: expansion("section:local")) {
-            if isSearching {
-                ForEach(shown) { branch in row(branch, title: branch.name).tag(branch.id) }
-            } else {
-                BranchTreeRows(nodes: PathNode.build(shown, path: { $0.name }), keyPrefix: "local:", collapsed: $collapsed,
-                               row: { row($0, title: $1) })
-            }
-        } header: {
-            Text("Local · \(shown.count)")
+    private var localRows: some View {
+        if localSearchText.isEmpty {
+            BranchTreeRows(nodes: PathNode.build(locals, path: { $0.name }), keyPrefix: "local:", collapsed: $collapsed,
+                           row: { row($0, title: $1) })
+        } else {
+            ForEach(locals) { branch in row(branch, title: branch.name).tag(branch.id) }
         }
     }
 
@@ -135,58 +137,100 @@ struct BranchesSidebar: View {
         String(branch.name.dropFirst(remoteName(of: branch).count + 1))
     }
 
+    /// Set apart on a raised background, behind a header the user clicks to open.
+    private var remotePanel: some View {
+        VStack(spacing: 0) {
+            Divider()
+            remoteHeader
+            if isRemoteOpen {
+                searchField("Search remote branches", text: $remoteQuery, id: "branch-remote-search")
+                branchList(emptySearch: remotes.isEmpty ? remoteSearchText : "") { remoteRows }
+                    .scrollContentBackground(.hidden)
+                    .accessibilityIdentifier("branches-remote-list")
+            }
+        }
+        .background(.theme(.surfaceRaised))
+    }
+
+    private var remoteHeader: some View {
+        Button { showsRemotes.toggle() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .rotationEffect(.degrees(isRemoteOpen ? 90 : 0))
+                    .foregroundStyle(.theme(.textSubtle))
+                Image(systemName: "cloud").foregroundStyle(.theme(.textSubtle))
+                panelTitle("Remote", count: remotes.count)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(activeScope == .remote)
+        .help(isRemoteOpen ? "Hide remote branches" : "Show remote branches")
+        .accessibilityIdentifier("branches-remote-toggle")
+    }
+
     @ViewBuilder
-    private var remoteSection: some View {
-        let shown = matches(remotes)
-        if !remotes.isEmpty {
-            Section(isExpanded: expansion("section:remote")) {
-                let byRemote = Dictionary(grouping: shown, by: remoteName(of:))
-                let names = byRemote.keys.sorted()
-                if isSearching {
-                    ForEach(shown) { branch in row(branch, title: nameOnRemote(branch)).tag(branch.id) }
-                } else if names.count == 1, let only = names.first {
-                    // One remote: its name would be the same word on every row, so the branches stand alone.
-                    BranchTreeRows(nodes: PathNode.build(byRemote[only] ?? [], path: nameOnRemote), keyPrefix: "remote:\(only):",
+    private var remoteRows: some View {
+        let byRemote = Dictionary(grouping: remotes, by: remoteName(of:))
+        let names = byRemote.keys.sorted()
+        if !remoteSearchText.isEmpty {
+            ForEach(remotes) { branch in row(branch, title: nameOnRemote(branch)).tag(branch.id) }
+        } else if names.count == 1, let only = names.first {
+            // One remote: its name would be the same word on every row, so the branches stand alone.
+            BranchTreeRows(nodes: PathNode.build(byRemote[only] ?? [], path: nameOnRemote), keyPrefix: "remote:\(only):",
+                           collapsed: $collapsed, row: { row($0, title: $1) })
+        } else {
+            ForEach(names, id: \.self) { name in
+                DisclosureGroup(isExpanded: expansion("remote:\(name)")) {
+                    BranchTreeRows(nodes: PathNode.build(byRemote[name] ?? [], path: nameOnRemote), keyPrefix: "remote:\(name):",
                                    collapsed: $collapsed, row: { row($0, title: $1) })
-                } else {
-                    ForEach(names, id: \.self) { name in
-                        DisclosureGroup(isExpanded: expansion("remote:\(name)")) {
-                            BranchTreeRows(nodes: PathNode.build(byRemote[name] ?? [], path: nameOnRemote), keyPrefix: "remote:\(name):",
-                                           collapsed: $collapsed, row: { row($0, title: $1) })
-                        } label: {
-                            Label("\(name) · \(byRemote[name]?.count ?? 0)", systemImage: "externaldrive.connected.to.line.below")
-                        }
-                    }
+                } label: {
+                    Label("\(name) · \(byRemote[name]?.count ?? 0)", systemImage: "externaldrive.connected.to.line.below")
                 }
-            } header: {
-                Text("Remote · \(shown.count)")
             }
         }
     }
 
     // MARK: - Rows and helpers
 
+    /// One panel's list: shared selection, context menu and double-click checkout. `emptySearch` is the search text
+    /// when nothing matches it, or empty when there is nothing to report.
+    private func branchList<Rows: View>(emptySearch: String, @ViewBuilder rows: () -> Rows) -> some View {
+        List(selection: $repository.branchSelection) { rows() }
+            .listStyle(.sidebar)
+            .contextMenu(forSelectionType: String.self) { ids in
+                if ids.count == 1, let branch = branch(withID: ids.first) {
+                    BranchContextMenu(repository: repository, app: app, branch: branch)
+                }
+            } primaryAction: { ids in
+                if ids.count == 1, let branch = branch(withID: ids.first) { checkOut(branch) }
+            }
+            .overlay {
+                if !emptySearch.isEmpty { ContentUnavailableView.search(text: emptySearch) }
+            }
+    }
+
     private func row(_ branch: GitBranch, title: String) -> some View {
         BranchRow(branch: branch, title: title)
     }
 
-    private func matches(_ list: [GitBranch]) -> [GitBranch] {
-        isSearching ? list.filter { $0.name.localizedCaseInsensitiveContains(searchText) } : list
-    }
-
     private func expansion(_ key: String) -> Binding<Bool> {
-        Binding(get: { isSearching || !collapsed.contains(key) }, set: { open in
+        Binding(get: { !collapsed.contains(key) }, set: { open in
             if open { collapsed.remove(key) } else { collapsed.insert(key) }
         })
     }
 
-    /// Every group, for "Collapse All".
+    /// Every remote and folder, for "Collapse All". The remote panel itself keeps its own toggle.
     private var allKeys: [String] {
         func folders(_ nodes: [PathNode<GitBranch>], prefix: String) -> [String] {
             nodes.filter(\.isFolder).flatMap { [prefix + $0.id] + folders($0.children ?? [], prefix: prefix) }
         }
-        var keys = ["section:local", "section:remote"] + folders(PathNode.build(locals, path: { $0.name }), prefix: "local:")
-        for (name, branches) in Dictionary(grouping: remotes, by: remoteName(of:)) {
+        var keys = folders(PathNode.build(allLocals, path: { $0.name }), prefix: "local:")
+        for (name, branches) in Dictionary(grouping: allRemotes, by: remoteName(of:)) {
             keys.append("remote:\(name)")
             keys += folders(PathNode.build(branches, path: nameOnRemote), prefix: "remote:\(name):")
         }

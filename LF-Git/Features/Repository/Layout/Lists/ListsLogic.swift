@@ -47,3 +47,18 @@ nonisolated struct ReflogTimeline<Item> {
         currentID = items.first.map(id)
     }
 }
+
+/// The toolbar branch menu's lists: local and remote are filtered by their own search box.
+nonisolated enum BranchMenuFilter {
+    /// Items whose name contains `query` (case-insensitive); a blank query keeps them all.
+    static func matching<Item>(_ items: [Item], query: String, name: KeyPath<Item, String>) -> [Item] {
+        let text = query.trimmingCharacters(in: .whitespaces)
+        return text.isEmpty ? items : items.filter { $0[keyPath: name].localizedCaseInsensitiveContains(text) }
+    }
+
+    /// What Return switches to: the first match that is not already checked out.
+    static func firstSwitchable<Item>(_ items: [Item], query: String, name: KeyPath<Item, String>,
+                                      isCurrent: KeyPath<Item, Bool>) -> Item? {
+        matching(items, query: query, name: name).first { !$0[keyPath: isCurrent] }
+    }
+}
