@@ -12,6 +12,9 @@ jobs:
   release:
     name: Build and publish
     runs-on: macos-26
+    env:
+      # A step's own env is not visible to its `if`, so the tap step checks this flag instead.
+      HAS_TAP_TOKEN: ${{ secrets.TAP_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -88,7 +91,7 @@ jobs:
       - name: Update the Homebrew tap
         env:
           TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
-        if: ${{ env.TAP_TOKEN != '' }}
+        if: ${{ env.HAS_TAP_TOKEN == 'true' }}
         run: |
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/alifu/homebrew-tap.git" tap
           mkdir -p tap/Casks
